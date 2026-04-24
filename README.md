@@ -46,7 +46,7 @@ Para garantir as relações obrigatórias (1:1, 1:N, N:N):
 ### **Membro B: Especialista em Lógica de Negócio e UI**
 
 * Lógica do Jogo (Sorteio de cartas, validação de turnos, lógica de vitória).  
-* Desenvolvimento do Frontend Vanilla (HTML/CSS/JS).  
+* Desenvolvimento do Frontend NextJs.  
 * Consumo da API REST (Fetch API).  
 * Gestão de Estado no Front (Atualizar o "Bloco de Notas" e a "Mão de Cartas").  
 * Implementação do Chat e Feedback Visual das jogadas.
