@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "web",
-  description: "Next.js app",
+  title: "Detetive: Arquivo Secreto",
+  description: "Web adaptation of the classic deduction game Clue Suspeitos.",
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="pt-BR" className="h-full antialiased dark">
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

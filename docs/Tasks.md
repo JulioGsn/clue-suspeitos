@@ -13,7 +13,7 @@
   * Integrar Swagger (`@nestjs/swagger`) no `main.ts`.
 * **Testes:** Criar `app.controller.spec.ts` garantindo que o servidor sobe e o healthcheck responde 200 OK.
 
-### [ ] Task 1.2: Setup do Frontend (Next.js + Tailwind Noir)
+### [x] Task 1.2: Setup do Frontend (Next.js + Tailwind Noir)
 * **Papel:** Frontend Developer.
 * **Ação:** Inicializar Next.js 14 (App Router). Configurar o Tailwind CSS com a paleta "Modern Noir" e "Gabinete de Investigação" especificada no Plan.md.
 * **Arquivos alvo:** `tailwind.config.ts`, `globals.css`, `layout.tsx`.
