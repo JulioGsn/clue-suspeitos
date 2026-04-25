@@ -4,7 +4,7 @@
 
 ## Epic 1: Infraestrutura e Setup Base
 
-### [ ] Task 1.1: Setup do Backend (NestJS + Dual DB TypeORM)
+### [x] Task 1.1: Setup do Backend (NestJS + Dual DB TypeORM)
 * **Papel:** Backend Developer.
 * **Ação:** Inicializar projeto NestJS. Configurar o TypeORM com duas conexões simultâneas (Main DB e Logs DB) usando MySQL.
 * **Arquivos alvo:** `app.module.ts`, `.env`, `database.config.ts`.

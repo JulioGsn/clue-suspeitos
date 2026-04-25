@@ -58,3 +58,35 @@ Para garantir as relações obrigatórias (1:1, 1:N, N:N):
 * **03/05 a 07/05:** Integração Front-Back e Lógica do Jogo.  
 * **08/05:** Orientações com o professor e ajustes finais.  
 * **09/05:** Apresentação.
+
+## **6\. Como Executar o Projeto**
+
+### **Pré-requisitos**
+* Node.js (v18+)
+* pnpm (recomendado) ou npm
+* Docker Desktop (para o banco de dados)
+
+### **1. Configuração do Banco de Dados**
+O projeto utiliza MySQL com uma estrutura de dois bancos (Principal e Auditoria). Para subir o ambiente:
+```bash
+docker compose up -d
+```
+*Isso criará os bancos `detetive_db` e `detetive_logs_db` automaticamente via script de inicialização.*
+
+### **2. Execução do Backend (NestJS)**
+Navegue até a raiz do projeto e execute:
+```bash
+npx pnpm --filter api run start:dev
+```
+A API estará disponível em `http://localhost:3000`.
+Acesse a documentação Swagger em: `http://localhost:3000/api`
+
+### **3. Execução do Frontend (NextJS)**
+Navegue até a raiz do projeto e execute:
+```bash
+npx pnpm --filter web run dev
+```
+O frontend estará disponível em `http://localhost:3001` (ou na porta configurada no app `web`).
+
+---
+*Status Report enviado em 25/04/2026.*

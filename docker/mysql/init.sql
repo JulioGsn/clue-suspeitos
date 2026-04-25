@@ -1,0 +1,2 @@
+CREATE DATABASE IF NOT EXISTS detetive_db;
+CREATE DATABASE IF NOT EXISTS detetive_logs_db;

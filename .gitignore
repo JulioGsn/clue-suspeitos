@@ -24,3 +24,6 @@ pnpm-debug.log*
 *.pid
 *.pid.lock
 *.seed
+
+#others
+temp/
