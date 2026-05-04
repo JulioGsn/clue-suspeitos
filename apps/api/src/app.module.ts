@@ -4,6 +4,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { getMainDatabaseConfig, getLogsDatabaseConfig } from './database.config';
+import { AuditoriaModule } from './modules/auditoria/auditoria.module';
+import { CartasModule } from './modules/cartas/cartas.module';
+import { PerfisModule } from './modules/perfis/perfis.module';
+import { UsuariosModule } from './modules/usuarios/usuarios.module';
 
 @Module({
   imports: [
@@ -21,6 +25,10 @@ import { getMainDatabaseConfig, getLogsDatabaseConfig } from './database.config'
       inject: [ConfigService],
       useFactory: getLogsDatabaseConfig,
     }),
+    UsuariosModule,
+    PerfisModule,
+    CartasModule,
+    AuditoriaModule,
   ],
   controllers: [AppController],
   providers: [AppService],
