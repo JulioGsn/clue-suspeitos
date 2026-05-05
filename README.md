@@ -65,6 +65,17 @@ Para garantir as relações obrigatórias (1:1, 1:N, N:N):
 * Node.js (v18+)
 * pnpm (recomendado) ou npm
 * Docker Desktop (para o banco de dados)
+ 
+### **Instalação de dependências**
+Execute os comandos na raiz do repositório para instalar as dependências do monorepo:
+
+```bash
+# Instala todas as dependências do workspace (usa pnpm)
+pnpm install
+
+# Se você não tiver o `pnpm` instalado globalmente, use:
+npx pnpm@latest install
+```
 
 ### **1. Configuração do Banco de Dados**
 O projeto utiliza MySQL com uma estrutura de dois bancos (Principal e Auditoria). Para subir o ambiente:
@@ -82,7 +93,7 @@ A API estará disponível em `http://localhost:3000`.
 Acesse a documentação Swagger em: `http://localhost:3000/api`
 
 ### **3. Execução do Frontend (NextJS)**
-Navegue até a raiz do projeto e execute:
+Navegue até a raiz do projeto e execute (após instalar dependências):
 ```bash
 npx pnpm --filter web run dev
 ```
