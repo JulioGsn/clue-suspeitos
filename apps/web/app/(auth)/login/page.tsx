@@ -1,177 +1,127 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { Eye, EyeOff, Fingerprint, Loader2, Mail, Shield } from "lucide-react";
+import React, { FormEvent, useRef, useState } from "react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError, api, saveSession } from "@/services/api";
+import { ApiError } from "@/services/api";
+import useAuth from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const folderRef = useRef<HTMLDivElement | null>(null);
+  const [tilt, setTilt] = useState({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
+
+  const { login } = useAuth();
+
+  function onMouseMove(e: React.MouseEvent) {
+    if (!folderRef.current) return;
+    const rect = folderRef.current.getBoundingClientRect();
+    const x = (rect.left + rect.width / 2 - e.clientX) / 40;
+    const y = (rect.top + rect.height / 2 - e.clientY) / 40;
+    setTilt({ transform: `perspective(1000px) rotateY(${x}deg) rotateX(${-y}deg)` });
+  }
+
+  function onMouseLeave() {
+    setTilt({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
-
     try {
-      const auth = await api.login({ email, password });
-      saveSession(auth);
+      await login(email, password);
       router.push("/home");
     } catch (caughtError) {
-      setError(
-        caughtError instanceof ApiError
-          ? caughtError.message
-          : "Nao foi possivel entrar agora.",
-      );
+      setError(caughtError instanceof ApiError ? caughtError.message : "Nao foi possivel entrar agora.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-[#10261c] text-noir-paper lg:grid-cols-[0.95fr_1.05fr]">
-      <section className="hidden border-r border-white/10 bg-[linear-gradient(150deg,#1a3b2b,#2c1e16)] p-10 lg:flex lg:flex-col lg:justify-between">
-        <Link
-          href="/"
-          className="flex w-fit items-center gap-3 text-sm font-semibold uppercase tracking-[0.24em] text-noir-paper/75"
+    <div className="min-h-screen bg-[var(--clue-dark)] text-[#111827] flex items-center justify-center">
+      <div className="fixed top-0 left-0 w-full h-10 crime-tape flex items-center justify-center z-50 border-b-2 border-black">
+        <span className="text-white font-bold tracking-[0.3em] text-sm uppercase px-4">CENA DO CRIME - NÃO ULTRAPASSE - CLUE SUSPEITOS - ARQUIVO DIGITAL</span>
+      </div>
+
+      <div className="w-full px-4 py-8 flex items-center justify-center">
+        <div
+          className="folder-container mx-auto w-full max-w-7xl p-12 md:p-20"
+          ref={folderRef}
+          onMouseMove={onMouseMove}
+          onMouseLeave={onMouseLeave}
+          style={tilt as React.CSSProperties}
         >
-          <span className="grid h-10 w-10 place-items-center rounded-md border border-noir-gold/40 bg-black/20">
-            <Fingerprint className="h-5 w-5 text-noir-gold" />
-          </span>
-          Arquivo Secreto
-        </Link>
-        <div>
-          <p className="mb-5 inline-flex items-center gap-2 rounded-md border border-noir-gold/30 bg-noir-gold/10 px-3 py-2 text-sm font-semibold text-yellow-100">
-            <Shield className="h-4 w-4" />
-            Acesso do investigador
-          </p>
-          <h1 className="max-w-xl text-5xl font-semibold leading-tight">
-            Entre para consultar salas e preparar a próxima investigação.
-          </h1>
-          <p className="mt-5 max-w-lg text-base leading-7 text-noir-paper/65">
-            O token JWT retornado pela API fica disponível para as próximas
-            chamadas de lobby e partida.
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {["Suspeitos", "Armas", "Locais"].map((item) => (
-            <div
-              key={item}
-              className="rounded-md border border-white/10 bg-black/20 p-4 text-sm font-semibold text-noir-paper/80"
-            >
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
+          {/* Clipe de papel visual */}
+          <div className="absolute -top-6 left-1/4 w-10 h-24 bg-zinc-400 rounded-full opacity-40 border-4 border-zinc-500 pointer-events-none hidden md:block"></div>
 
-      <section className="flex items-center justify-center px-5 py-10">
-        <div className="w-full max-w-md">
-          <div className="mb-8 lg:hidden">
-            <Link
-              href="/"
-              className="flex w-fit items-center gap-3 text-sm font-semibold uppercase tracking-[0.18em] text-noir-paper/75"
-            >
-              <Fingerprint className="h-5 w-5 text-noir-gold" />
-              Arquivo Secreto
-            </Link>
-          </div>
-
-          <div className="rounded-lg border border-white/10 bg-noir-paper p-6 text-[#1b1a16] shadow-2xl shadow-black/25 sm:p-8">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-noir-orange">
-                Login
-              </p>
-              <h2 className="mt-2 text-3xl font-semibold">
-                Retomar investigação
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-[#615845]">
-                Use as credenciais cadastradas na API NestJS.
-              </p>
+          {/* Marca de Café Decorativa */}
+          <div className="absolute bottom-11 left-10 w-28 h-28 border-4 border-stone-800 rounded-full opacity-5 pointer-events-none"></div>
+          <div className="flex flex-col md:flex-row gap-12 items-stretch">
+            <div className="flex-1 md:w-1/2 flex flex-col justify-center">
+              <div className="mb-6">
+                <h1 className="special-elite text-5xl text-stone-900 leading-tight mb-2 uppercase">Acesso<br/>Restrito</h1>
+                <div className="h-1 w-28 bg-stone-800" />
+              </div>
+              <div className="space-y-4 text-stone-700 text-base italic">
+                <p><strong>CENTRAL DE CASOS:</strong> Acesse este terminal para organizar novas partidas ou juntar-se a investigações em andamento.</p>
+                <p><strong>AVISO:</strong> Cada movimento é registrado. A falsificação de pistas resultará em banimento imediato da agência.</p>
+              </div>
+              <div className="mt-12">
+                <div className="stamp inline-block text-2xl special-elite">TOP SECRET</div>
+              </div>
             </div>
 
-            <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-              <label className="block">
-                <span className="text-sm font-semibold text-[#2c1e16]">
-                  Email
-                </span>
-                <span className="mt-2 flex h-12 items-center gap-2 rounded-md border border-[#d7cab0] bg-white px-3 focus-within:border-noir-orange">
-                  <Mail className="h-4 w-4 text-[#8d8066]" />
-                  <input
-                    className="w-full bg-transparent text-sm outline-none"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                  />
-                </span>
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-semibold text-[#2c1e16]">
-                  Senha
-                </span>
-                <span className="mt-2 flex h-12 items-center gap-2 rounded-md border border-[#d7cab0] bg-white px-3 focus-within:border-noir-orange">
-                  <Shield className="h-4 w-4 text-[#8d8066]" />
-                  <input
-                    className="w-full bg-transparent text-sm outline-none"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    minLength={6}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="grid h-8 w-8 place-items-center rounded-md text-[#8d8066] hover:bg-[#f1eadb]"
-                    onClick={() => setShowPassword((current) => !current)}
-                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </span>
-              </label>
-
-              {error ? (
-                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
-                  {error}
+            <div className="flex-1 md:w-1/2 flex items-center justify-center">
+              <div className="confidential-card p-8 shadow-xl w-full max-w-md">
+                <div className="flex items-center justify-between mb-6">
+                  <span className="text-base font-bold text-stone-500 uppercase">Credenciais do Agente</span>
+                  <div className="flex space-x-2">
+                    <div className="w-3 h-3 rounded-full bg-red-600 alert-dot" />
+                    <div className="w-3 h-3 rounded-full bg-gray-300" />
+                  </div>
                 </div>
-              ) : null}
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-noir-orange px-5 text-sm font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Entrar
-              </button>
-            </form>
+                <form id="login-form" className="space-y-6" onSubmit={handleSubmit}>
+                  <div>
+                    <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">E-mail de Registro</label>
+                    <input type="email" id="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-field w-full" placeholder="agente@investigacao.com" />
+                  </div>
 
-            <p className="mt-6 text-center text-sm text-[#615845]">
-              Novo no caso?{" "}
-              <Link
-                href="/register"
-                className="font-bold text-noir-red underline-offset-4 hover:underline"
-              >
-                Criar conta
-              </Link>
-            </p>
+                  <div>
+                    <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">Código de Segurança</label>
+                    <input type="password" id="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input-field w-full" placeholder="••••••••" />
+                  </div>
+
+                  {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">{error}</div> : null}
+
+                  <button type="submit" className="w-full bg-black text-white py-4 px-4 font-bold special-elite hover:bg-neutral-900 transition-colors duration-300 shadow-md active:transform active:scale-95" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" /> : null}
+                    ACESSAR CENTRAL DE CASOS
+                  </button>
+                </form>
+
+                <div className="mt-6 flex justify-between items-center text-sm text-stone-400 font-bold uppercase">
+                  <Link href="/register" className="hover:text-stone-700">Novo Alistamento</Link>
+                  <a href="#" className="hover:text-stone-700 underline">Recuperar Código</a>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+
+      <div className="fixed bottom-0 left-0 w-full h-10 crime-tape flex items-center justify-center z-50 border-t-2 border-black">
+        <span className="text-white font-bold tracking-[0.2em] text-sm uppercase px-4">SUSPEITOS PRINCIPAIS: JALES MONTEIRO - JÚLIO GOMES - [DESCONHECIDO]</span>
+      </div>
+    </div>
   );
 }

@@ -1,195 +1,141 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import {
-  Eye,
-  EyeOff,
-  Fingerprint,
-  Loader2,
-  Mail,
-  Shield,
-  UserRound,
-} from "lucide-react";
+import React, { FormEvent, useRef, useState } from "react";
+import { Fingerprint, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ApiError, api, saveSession } from "@/services/api";
+import { ApiError } from "@/services/api";
+import useAuth from "@/hooks/useAuth";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const folderRef = useRef<HTMLDivElement | null>(null);
+  const [tilt, setTilt] = useState({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
+
+  const { register } = useAuth();
+
+  function onMouseMove(e: React.MouseEvent) {
+    if (!folderRef.current) return;
+    const rect = folderRef.current.getBoundingClientRect();
+    const x = (e.clientX - (rect.left + rect.width / 2)) / 50;
+    const y = (e.clientY - (rect.top + rect.height / 2)) / 50;
+    setTilt({ transform: `perspective(1000px) rotateY(${x}deg) rotateX(${-y}deg)` });
+  }
+
+  function onMouseLeave() {
+    setTilt({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
-
     try {
-      const auth = await api.register({ username, email, password });
-      saveSession(auth);
+      await register(username, email, password);
       router.push("/home");
     } catch (caughtError) {
-      setError(
-        caughtError instanceof ApiError
-          ? caughtError.message
-          : "Nao foi possivel criar a conta agora.",
-      );
+      setError(caughtError instanceof ApiError ? caughtError.message : "Nao foi possivel criar a conta agora.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-[#10261c] text-noir-paper lg:grid-cols-[1.05fr_0.95fr]">
-      <section className="flex items-center justify-center px-5 py-10">
-        <div className="w-full max-w-md">
-          <div className="mb-8">
-            <Link
-              href="/"
-              className="flex w-fit items-center gap-3 text-sm font-semibold uppercase tracking-[0.18em] text-noir-paper/75"
-            >
-              <Fingerprint className="h-5 w-5 text-noir-gold" />
-              Arquivo Secreto
-            </Link>
-          </div>
+    <div className="min-h-screen bg-[var(--clue-dark)] text-[#111827] flex items-center justify-center">
+      <div className="fixed top-0 left-0 w-full h-10 crime-tape flex items-center justify-center z-50 border-b-2 border-black">
+        <span className="text-white font-bold tracking-[0.3em] text-sm uppercase px-4">REGISTRO DE RECRUTA - CONFIDENCIAL - CLUE SUSPEITOS</span>
+      </div>
 
-          <div className="rounded-lg border border-white/10 bg-noir-paper p-6 text-[#1b1a16] shadow-2xl shadow-black/25 sm:p-8">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-noir-orange">
-                Cadastro
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold">
-                Novo investigador
-              </h1>
-              <p className="mt-2 text-sm leading-6 text-[#615845]">
-                Cria usuário e perfil conforme o contrato atual da API.
-              </p>
-            </div>
+      <div className="w-full px-4 py-8 flex items-center justify-center">
+        <div className="folder-container mx-auto w-full max-w-7xl p-12 md:p-20" ref={folderRef} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} style={tilt as React.CSSProperties}>
+          {/* Clipe de papel visual */}
+          <div className="absolute -top-6 left-1/4 w-10 h-24 bg-zinc-400 rounded-full opacity-40 border-4 border-zinc-500 pointer-events-none hidden md:block"></div>
 
-            <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-              <label className="block">
-                <span className="text-sm font-semibold text-[#2c1e16]">
-                  Nome de exibição
-                </span>
-                <span className="mt-2 flex h-12 items-center gap-2 rounded-md border border-[#d7cab0] bg-white px-3 focus-within:border-noir-orange">
-                  <UserRound className="h-4 w-4 text-[#8d8066]" />
-                  <input
-                    className="w-full bg-transparent text-sm outline-none"
-                    type="text"
-                    minLength={3}
-                    maxLength={50}
-                    autoComplete="nickname"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    required
-                  />
-                </span>
-              </label>
+          
+          <div className="flex flex-col md:flex-row gap-12 items-stretch">
+            <div className="flex-1 md:w-1/2 flex flex-col justify-center order-2 md:order-1">
+              <div className="mb-6">
+                <h1 className="special-elite text-4xl md:text-5xl text-stone-900 leading-tight mb-2 uppercase italic underline">Formulário de<br/>Alistamento</h1>
+                <div className="h-1 w-32 bg-red-800" />
+              </div>
 
-              <label className="block">
-                <span className="text-sm font-semibold text-[#2c1e16]">
-                  Email
-                </span>
-                <span className="mt-2 flex h-12 items-center gap-2 rounded-md border border-[#d7cab0] bg-white px-3 focus-within:border-noir-orange">
-                  <Mail className="h-4 w-4 text-[#8d8066]" />
-                  <input
-                    className="w-full bg-transparent text-sm outline-none"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
-                  />
-                </span>
-              </label>
+              <div className="space-y-6 text-stone-700 text-base">
+                <section>
+                  <h3 className="font-bold text-stone-900 uppercase text-base mb-1">I. Juramento do Investigador</h3>
+                  <p className="italic">"Prometo usar minhas habilidades para encontrar o culpado, o local e a arma, sem jamais ignorar uma evidência."</p>
+                </section>
+                <section>
+                  <h3 className="font-bold text-stone-900 uppercase text-base mb-1">II. Responsabilidades</h3>
+                  <ul className="list-disc list-inside space-y-1 text-base">
+                    <li>Criar salas de interrogatório seguras.</li>
+                    <li>Identificar blefes de outros agentes.</li>
+                    <li>Manter sigilo sobre os suspeitos principais.</li>
+                  </ul>
+                </section>
 
-              <label className="block">
-                <span className="text-sm font-semibold text-[#2c1e16]">
-                  Senha
-                </span>
-                <span className="mt-2 flex h-12 items-center gap-2 rounded-md border border-[#d7cab0] bg-white px-3 focus-within:border-noir-orange">
-                  <Shield className="h-4 w-4 text-[#8d8066]" />
-                  <input
-                    className="w-full bg-transparent text-sm outline-none"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    minLength={6}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="grid h-8 w-8 place-items-center rounded-md text-[#8d8066] hover:bg-[#f1eadb]"
-                    onClick={() => setShowPassword((current) => !current)}
-                    aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </span>
-              </label>
-
-              {error ? (
-                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
-                  {error}
+                <div className="mt-10 flex items-center space-x-4">
+                  <div className="stamp-blue inline-block text-2xl special-elite">APROVADO</div>
+                  <div className="text-base text-stone-400 font-bold uppercase w-40">Agência de Investigação Federal</div>
                 </div>
-              ) : null}
+              </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-md bg-noir-orange px-5 text-sm font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Criar conta
-              </button>
-            </form>
+            <div className="flex-1 md:w-1/2 flex items-center justify-center order-1 md:order-2">
+              <div className="enlistment-card p-8 relative bg-white border-dashed border-gray-300 shadow-lg w-full max-w-md">
+                <div className="absolute -top-3 -right-3 bg-red-700 text-white text-xs font-bold px-2 py-1 urgent-tag shadow-lg uppercase">Urgente</div>
 
-            <p className="mt-6 text-center text-sm text-[#615845]">
-              Já tem acesso?{" "}
-              <Link
-                href="/login"
-                className="font-bold text-noir-red underline-offset-4 hover:underline"
-              >
-                Entrar
-              </Link>
-            </p>
+                <div className="mb-6 border-b border-stone-200 pb-2">
+                  <span className="special-elite text-2xl text-stone-800">DADOS DO RECRUTA</span>
+                </div>
+
+                <form id="signup-form" className="space-y-5" onSubmit={handleSubmit}>
+                  <div>
+                    <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">Nome de Agente (Apelido)</label>
+                    <input type="text" id="nickname" required className="input-field w-full" placeholder="Ex: Inspetor_Morse" value={username} onChange={(e) => setUsername(e.target.value)} />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">E-mail para Contato</label>
+                    <input type="email" id="email" required className="input-field w-full" placeholder="agente@agencia.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">Senha</label>
+                      <input type="password" id="password" required className="input-field w-full" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-stone-500 uppercase tracking-widest mb-2">Confirmar</label>
+                      <input type="password" id="confirm-password" required className="input-field w-full" placeholder="••••••••" />
+                    </div>
+                  </div>
+
+                  {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">{error}</div> : null}
+
+                  <div className="pt-4">
+                    <button type="submit" className="w-full bg-red-900 text-white py-4 px-4 font-bold special-elite hover:bg-stone-900 transition-all duration-300 shadow-xl active:transform active:scale-95" disabled={isSubmitting}>
+                      {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin inline-block mr-2" /> : null}
+                      ASSINAR E ALISTAR-SE
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-6 text-center text-sm text-stone-400 font-bold uppercase">Já possui credenciais? <Link href="/login" className="text-stone-800 hover:underline">Retornar ao Login</Link></div>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="hidden border-l border-white/10 bg-[radial-gradient(circle_at_top,rgba(249,115,22,0.16),transparent_24rem),linear-gradient(150deg,#1a3b2b,#2c1e16)] p-10 lg:flex lg:flex-col lg:justify-between">
-        <div className="ml-auto rounded-md border border-noir-gold/30 bg-black/20 px-3 py-2 text-sm font-semibold text-noir-gold">
-          2 a 5 jogadores
-        </div>
-        <div className="max-w-lg">
-          <h2 className="text-5xl font-semibold leading-tight">
-            Monte sua sala, adicione bots e comece pelo lobby.
-          </h2>
-          <p className="mt-5 text-base leading-7 text-noir-paper/65">
-            Esta primeira versão cobre o fluxo antes da mesa de jogo e deixa o
-            caminho pronto para sockets no core loop.
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {["Login", "Salas", "Lobby"].map((item) => (
-            <div
-              key={item}
-              className="rounded-md border border-white/10 bg-black/20 p-4 text-sm font-semibold text-noir-paper/80"
-            >
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
+      <div className="fixed bottom-0 left-0 w-full h-10 crime-tape flex items-center justify-center z-50 border-t-2 border-black">
+        <span className="text-white font-bold tracking-[0.2em] text-sm uppercase px-4">SUSPEITOS PRINCIPAIS: JALES MONTEIRO - JÚLIO GOMES - [DESCONHECIDO]</span>
+      </div>
+    </div>
   );
 }

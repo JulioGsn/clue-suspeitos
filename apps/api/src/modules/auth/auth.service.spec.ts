@@ -27,8 +27,6 @@ describe('AuthService', () => {
     passwordHash:
       '$2b$10$fce2Xsm0vskh0KgXn8S/V.Pb1nDp20ddsyWu6E/2sL1TGSbj8bJC6',
     role: UsuarioRole.PLAYER,
-    vitorias: 0,
-    derrotas: 0,
     createdAt: new Date(),
     perfil,
   };
