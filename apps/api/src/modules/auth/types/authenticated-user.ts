@@ -19,7 +19,5 @@ export type AuthResponse = {
     role: UsuarioRole;
     perfilId: string;
     username: string;
-    vitorias: number;
-    derrotas: number;
   };
 };

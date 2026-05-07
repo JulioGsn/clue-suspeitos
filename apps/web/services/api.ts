@@ -8,8 +8,6 @@ export type AuthUser = {
   role: UserRole;
   perfilId: string;
   username: string;
-  vitorias: number;
-  derrotas: number;
 };
 
 export type AuthResponse = {

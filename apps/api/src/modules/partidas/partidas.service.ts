@@ -11,6 +11,7 @@ import { Jogador } from '../jogadores/entities/jogador.entity';
 import { MaoCarta } from '../mao-cartas/entities/mao-carta.entity';
 import { Pergunta } from '../perguntas/entities/pergunta.entity';
 import { Tema } from '../temas/entities/tema.entity';
+import { Perfil } from '../perfis/entities/perfil.entity';
 import { Usuario } from '../usuarios/entities/usuario.entity';
 import { CreateAcusacaoDto } from './dto/create-acusacao.dto';
 import { CreatePartidaDto } from './dto/create-partida.dto';
@@ -383,15 +384,22 @@ export class PartidasService {
       const partidaRepository = manager.getRepository(Partida);
       const jogadorRepository = manager.getRepository(Jogador);
       const usuarioRepository = manager.getRepository(Usuario);
+      const perfilRepository = manager.getRepository(Perfil);
 
       if (isCorreta) {
         const vencedor = await this.findUsuarioOrFail(usuarioId);
         partida.status = StatusPartida.FINALIZADA;
         partida.vencedor = vencedor;
         await partidaRepository.save(partida);
-        await usuarioRepository.increment({ id: usuarioId }, 'vitorias', 1);
+        await perfilRepository
+          .createQueryBuilder()
+          .update()
+          .set({ vitorias: () => 'vitorias + 1' })
+          .where('user_id = :usuarioId', { usuarioId })
+          .execute();
+
         await this.incrementarDerrotasDosPerdedores(
-          usuarioRepository,
+          perfilRepository,
           jogadores,
           usuarioId,
         );
@@ -401,7 +409,12 @@ export class PartidasService {
       acusador.isEliminado = true;
       isEliminado = true;
       await jogadorRepository.save(acusador);
-      await usuarioRepository.increment({ id: usuarioId }, 'derrotas', 1);
+      await perfilRepository
+        .createQueryBuilder()
+        .update()
+        .set({ derrotas: () => 'derrotas + 1' })
+        .where('user_id = :usuarioId', { usuarioId })
+        .execute();
 
       const humanosAtivos = jogadores.filter(
         (jogador) =>
@@ -419,11 +432,12 @@ export class PartidasService {
         partida.status = StatusPartida.FINALIZADA;
         partida.vencedor = humanosAtivos[0].usuario;
         await partidaRepository.save(partida);
-        await usuarioRepository.increment(
-          { id: humanosAtivos[0].usuario.id },
-          'vitorias',
-          1,
-        );
+        await perfilRepository
+          .createQueryBuilder()
+          .update()
+          .set({ vitorias: () => 'vitorias + 1' })
+          .where('user_id = :usuarioId', { usuarioId: humanosAtivos[0].usuario.id })
+          .execute();
         return;
       }
 
@@ -631,7 +645,7 @@ export class PartidasService {
   }
 
   private async incrementarDerrotasDosPerdedores(
-    usuarioRepository: Repository<Usuario>,
+    perfilRepository: Repository<Perfil>,
     jogadores: Jogador[],
     vencedorId: string,
   ): Promise<void> {
@@ -640,7 +654,12 @@ export class PartidasService {
       .filter((id): id is string => Boolean(id) && id !== vencedorId);
 
     for (const usuarioId of new Set(perdedoresIds)) {
-      await usuarioRepository.increment({ id: usuarioId }, 'derrotas', 1);
+      await perfilRepository
+        .createQueryBuilder()
+        .update()
+        .set({ derrotas: () => 'derrotas + 1' })
+        .where('user_id = :usuarioId', { usuarioId })
+        .execute();
     }
   }
 

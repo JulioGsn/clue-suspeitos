@@ -109,8 +109,6 @@ export class AuthService {
         role: usuario.role,
         perfilId: perfil.id,
         username: perfil.username,
-        vitorias: usuario.vitorias,
-        derrotas: usuario.derrotas,
       },
     };
   }
