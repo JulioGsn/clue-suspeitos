@@ -1,7 +1,9 @@
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
-export const getMainDatabaseConfig = (configService: ConfigService): TypeOrmModuleOptions => ({
+export const getMainDatabaseConfig = (
+  configService: ConfigService,
+): TypeOrmModuleOptions => ({
   type: 'mysql',
   host: configService.get<string>('DB_HOST', 'localhost'),
   port: configService.get<number>('DB_PORT', 3306),
@@ -12,7 +14,9 @@ export const getMainDatabaseConfig = (configService: ConfigService): TypeOrmModu
   synchronize: true, // Only for dev
 });
 
-export const getLogsDatabaseConfig = (configService: ConfigService): TypeOrmModuleOptions => ({
+export const getLogsDatabaseConfig = (
+  configService: ConfigService,
+): TypeOrmModuleOptions => ({
   name: 'logsConnection',
   type: 'mysql',
   host: configService.get<string>('DB_HOST', 'localhost'),

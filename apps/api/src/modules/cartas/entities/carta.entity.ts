@@ -1,4 +1,12 @@
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Unique,
+} from 'typeorm';
+import { Tema } from '../../temas/entities/tema.entity';
 
 export enum TipoCarta {
   SUSPEITO = 'SUSPEITO',
@@ -7,6 +15,7 @@ export enum TipoCarta {
 }
 
 @Entity('cartas')
+@Unique('UQ_cartas_nome_tipo_tema', ['nome', 'tipo', 'tema'])
 export class Carta {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -22,4 +31,11 @@ export class Carta {
 
   @Column({ name: 'image_url', length: 255 })
   imageUrl!: string;
+
+  @ManyToOne(() => Tema, (tema) => tema.cartas, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'tema_id' })
+  tema!: Tema;
 }

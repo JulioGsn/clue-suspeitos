@@ -34,6 +34,11 @@ export class Auditoria {
   @Column({ name: 'payload_novo', type: 'json', nullable: true })
   payloadNovo!: Record<string, unknown> | null;
 
-  @Column({ name: 'responsavel_id', length: 36, nullable: true })
+  @Column({
+    name: 'responsavel_id',
+    type: 'varchar',
+    length: 36,
+    nullable: true,
+  })
   responsavelId!: string | null;
 }

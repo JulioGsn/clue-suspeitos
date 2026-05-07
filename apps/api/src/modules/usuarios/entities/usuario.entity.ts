@@ -30,6 +30,12 @@ export class Usuario {
   })
   role!: UsuarioRole;
 
+  @Column({ default: 0 })
+  vitorias!: number;
+
+  @Column({ default: 0 })
+  derrotas!: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

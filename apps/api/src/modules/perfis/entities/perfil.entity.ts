@@ -22,7 +22,7 @@ export class Perfil {
   @Column({ length: 50 })
   username!: string;
 
-  @Column({ name: 'avatar_url', length: 255, nullable: true })
+  @Column({ name: 'avatar_url', type: 'varchar', length: 255, nullable: true })
   avatarUrl!: string | null;
 
   @Column({ default: 0 })
