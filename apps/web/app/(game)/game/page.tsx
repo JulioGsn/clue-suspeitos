@@ -380,8 +380,28 @@ export default function Page() {
   function sendChat() {
     const input = document.getElementById('chat-input') as HTMLInputElement | null;
     if (!input || !input.value.trim()) return;
-    addChatMsg("VOCÊ", input.value);
+    const text = input.value;
+    addChatMsg("VOCÊ", text);
     input.value = '';
+    (async () => {
+      try {
+        const me = await api.me();
+        const pid = me?.currentPartidaId;
+        // persist optimistic message
+        try {
+          if (pid) {
+            const raw = sessionStorage.getItem(`partida_chat_${pid}`);
+            const arr = raw ? JSON.parse(raw) : [];
+            arr.push({ author: 'VOCÊ', text });
+            sessionStorage.setItem(`partida_chat_${pid}`, JSON.stringify(arr));
+          }
+        } catch (e) {}
+
+        await api.sendChatMessage(undefined, pid ?? undefined, text);
+      } catch (e) {
+        addChatMsg('Sistema', 'Falha ao enviar mensagem.');
+      }
+    })();
   }
 
   function addChatMsg(user: string, text: string, customClass = '') {
@@ -394,9 +414,63 @@ export default function Page() {
     container.scrollTop = container.scrollHeight;
   }
 
+  // Load persisted chat from lobby and subscribe to SSE stream so Rádio is continuous
   useEffect(() => {
-    const chatMessages = document.getElementById('chat-messages');
-    if (chatMessages && chatMessages.children.length === 0) addChatMsg('SISTEMA', 'Investigação iniciada.');
+    let es: EventSource | null = null;
+    (async () => {
+      try {
+        const me = await api.me();
+        const partidaId = me?.currentPartidaId;
+        if (partidaId) {
+          try {
+            const raw = sessionStorage.getItem(`partida_chat_${partidaId}`);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                parsed.forEach((m: any) => addChatMsg(m.author ?? '?', m.text ?? ''));
+                // scroll to bottom after injecting history
+                setTimeout(() => { try { const c = document.getElementById('chat-messages'); if (c) c.scrollTop = c.scrollHeight; } catch (e) {} }, 50);
+              } else {
+                addChatMsg('SISTEMA', 'Investigação iniciada.');
+              }
+            } else {
+              addChatMsg('SISTEMA', 'Investigação iniciada.');
+            }
+          } catch (e) {
+            addChatMsg('SISTEMA', 'Investigação iniciada.');
+          }
+
+          const base = (process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? 'http://localhost:3001');
+          try {
+            es = new EventSource(`${base}/partidas/${partidaId}/chat/stream`, { withCredentials: true } as any);
+          } catch (e) {
+            es = null;
+          }
+
+          if (es) {
+            es.onmessage = (ev) => {
+              try {
+                const payload = JSON.parse(ev.data);
+                addChatMsg(payload.author ?? '??', payload.text ?? '');
+                try {
+                  const rawNow = sessionStorage.getItem(`partida_chat_${partidaId}`);
+                  const arr = rawNow ? JSON.parse(rawNow) : [];
+                  arr.push({ author: payload.author, text: payload.text });
+                  sessionStorage.setItem(`partida_chat_${partidaId}`, JSON.stringify(arr));
+                } catch (e) {}
+              } catch (err) {}
+            };
+            es.onerror = () => {};
+          }
+        } else {
+          addChatMsg('SISTEMA', 'Investigação iniciada.');
+        }
+      } catch (e) {
+        addChatMsg('SISTEMA', 'Investigação iniciada.');
+      }
+    })();
+
+    return () => { try { es?.close(); } catch {} };
   }, []);
 
   return (
@@ -421,6 +495,10 @@ export default function Page() {
           .is-eliminated .stamp-defeated { display: block; }
           .is-eliminated #action-buttons { opacity: 0.3; pointer-events: none; }
           .chat-msg { border-bottom: 1px solid rgba(0,0,0,0.05); padding: 4px 0; font-size: 11px; color: #111; }
+          /* Rádio/chat sizing and scroll behavior */
+          #content-chat { display:flex; flex-direction:column; height:100%; }
+          #chat-messages { flex: 1 1 auto; overflow-y: auto; padding: 1rem; max-height: 120px; }
+          .chat-msg { color: #111; }
           .elimination-checkbox { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border: 2px solid var(--accent-red); cursor: pointer; position: relative; display: inline-block; vertical-align: middle; background: transparent; }
           .elimination-checkbox:checked { background: var(--accent-red); border-color: var(--accent-red); }
           .elimination-checkbox:checked::after { content: 'X'; color: #ffffff; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -55%); font-size: 12px; font-family: 'Special Elite'; }
@@ -444,6 +522,10 @@ export default function Page() {
           ::-webkit-scrollbar { width: 6px; }
           ::-webkit-scrollbar-track { background: #dcd3bc; }
           ::-webkit-scrollbar-thumb { background: var(--accent-red); }
+          /* Layout fixes to avoid footer overlap and allow inner scrolling */
+          .game-main { padding-bottom: 13rem !important; box-sizing: border-box; }
+          .game-main .paper-sheet, .game-main .flex-1 { min-height: 0 !important; }
+          #chat-messages { max-height: 120px !important; }
         ` }} />
       </Head>
 
@@ -456,8 +538,8 @@ export default function Page() {
           </div>
         </div>
 
-        <main className="flex-1 overflow-hidden p-4 grid grid-cols-12 gap-4">
-          <div className="col-span-3 flex flex-col paper-sheet p-4 h-full">
+        <main className="game-main flex-1 min-h-0 overflow-hidden p-4 grid grid-cols-12 gap-4">
+          <div className="col-span-3 flex flex-col paper-sheet p-4 flex-1 min-h-0">
             <h2 className="special-elite text-xl border-b-2 border-stone-800 mb-4 uppercase shrink-0">Dossiê de Eliminação</h2>
             <div id="dossie-list" className="flex-1 overflow-y-auto space-y-4 pr-2">
               <section data-category="Suspeito">
@@ -496,7 +578,7 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="col-span-6 flex flex-col gap-4 h-full">
+          <div className="col-span-6 flex flex-col gap-4 flex-1 min-h-0">
             <div className="paper-sheet p-4 shrink-0 flex justify-around items-center">
               <div className="text-center">
                 <span className="text-[8px] font-bold text-stone-400 block mb-2 uppercase tracking-widest">Evidncias Pblicas</span>
@@ -529,7 +611,7 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="col-span-3 flex flex-col gap-4 h-full">
+          <div className="col-span-3 flex flex-col gap-4 flex-1 min-h-0">
             <div className="paper-sheet p-4 shrink-0 h-48 flex flex-col">
               <h3 className="text-[10px] font-bold text-stone-500 uppercase border-b mb-2 shrink-0">Equipe em Campo</h3>
               <div className="flex-1 overflow-y-auto space-y-2 pr-1">

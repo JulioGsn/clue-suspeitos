@@ -144,9 +144,34 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
       initial.push({ author: j.username ?? (j.email?.split('@')[0] ?? 'Agente'), text: phrase });
     });
 
+    // prefer persisted chat from sessionStorage if available
+    try {
+      const raw = sessionStorage.getItem(`partida_chat_${partida.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setChatMessages(parsed);
+          prevPlayersRef.current = partida.jogadores ?? [];
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
     setChatMessages((prev) => (prev && prev.length > 0 ? prev : initial));
     prevPlayersRef.current = partida.jogadores ?? [];
   }, [partida]);
+
+  // Persist chat messages so other pages (game) can continue the conversation
+  useEffect(() => {
+    if (!partidaId) return;
+    try {
+      sessionStorage.setItem(`partida_chat_${partidaId}`, JSON.stringify(chatMessages));
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, [chatMessages, partidaId]);
 
   // SSE: subscribe to chat stream
   useEffect(() => {
