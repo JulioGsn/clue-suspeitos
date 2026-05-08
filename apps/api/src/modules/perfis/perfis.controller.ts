@@ -20,6 +20,9 @@ import { join } from 'path';
 import * as bcrypt from 'bcrypt';
 // mkdirSync not needed here (handled in main.ts bootstrap)
 
+// Minimal local type for uploaded file — we only read `filename` here.
+type UploadedFile = { filename?: string } & Record<string, unknown>;
+
 @UseGuards(JwtAuthGuard)
 @Controller('perfis')
 export class PerfisController {
@@ -38,9 +41,9 @@ export class PerfisController {
   )
   async updatePerfil(
     @CurrentUser() user: AuthenticatedUser,
-    @UploadedFile() avatar?: Express.Multer.File,
     @Body()
     body: { username?: string; currentPassword?: string; newPassword?: string },
+    @UploadedFile() avatar?: UploadedFile,
   ) {
     const usuario = await this.usuarioRepository.findOne({
       where: { id: user.usuarioId },
@@ -61,8 +64,11 @@ export class PerfisController {
 
     // avatar upload (no password required)
     if (avatar) {
-      usuario.perfil.avatarUrl = `/uploads/avatars/${avatar.filename}`;
-      changed = true;
+      const filename = (avatar as unknown as { filename?: string })?.filename;
+      if (typeof filename === 'string' && filename) {
+        usuario.perfil.avatarUrl = `/uploads/avatars/${filename}`;
+        changed = true;
+      }
     }
 
     // password change: require currentPassword

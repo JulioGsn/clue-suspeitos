@@ -53,6 +53,31 @@
         /* Fundo da Mesa de Jogo */
         .bg-table-dark { background: radial-gradient(circle, #2a4b3b 0%, #1a3b2b 80%); }
         .bg-table-light { background: radial-gradient(circle, #e6d5b8 0%, #d4b483 80%); }
+        
+        /* Login hero background (moved from inline style) */
+        #screen-login {
+            background-image: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.9)), url('https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=2070&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+        }
+
+        /* Secret file title shadow */
+        #secret-file h3 {
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.3);
+        }
+
+        /* Visually hidden helper for screen readers */
+        .sr-only {
+            position: absolute !important;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 </head>
 <body class="bg-noir-paper text-slate-800 dark:bg-noir-wood dark:text-noir-cream font-sans h-screen w-screen overflow-hidden flex flex-col md:flex-row transition-colors duration-300">
@@ -85,7 +110,7 @@
                     <p class="text-sm font-bold truncate dark:text-white">Ana</p>
                     <p class="text-xs text-slate-500 dark:text-slate-400">24 Vitórias</p>
                 </div>
-                <button onclick="navTo('login')" class="text-slate-400 hover:text-noir-blood transition-colors"><i class="fa-solid fa-right-from-bracket"></i></button>
+                <button onclick="navTo('login')" class="text-slate-400 hover:text-noir-blood transition-colors" title="Sair" aria-label="Sair"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
             </div>
         </div>
     </nav>
@@ -102,7 +127,7 @@
     <main class="flex-1 relative overflow-y-auto overflow-x-hidden no-scrollbar bg-slate-50 dark:bg-slate-950">
         
         <!-- Tela 1: Login / Registro -->
-        <section id="screen-login" class="screen absolute inset-0 flex items-center justify-center bg-cover bg-center" style="background-image: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.9)), url('https://images.unsplash.com/photo-1605806616949-1e87b487cb2a?q=80&w=2070&auto=format&fit=crop');">
+        <section id="screen-login" class="screen absolute inset-0 flex items-center justify-center bg-cover bg-center">
             <div class="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-2xl w-full max-w-md mx-4 border border-slate-200 dark:border-slate-700 backdrop-blur-sm bg-opacity-95 dark:bg-opacity-90">
                 <div class="text-center mb-8">
                     <i class="fa-solid fa-user-secret text-4xl text-noir-navy dark:text-noir-gold mb-3"></i>
@@ -111,12 +136,12 @@
                 </div>
                 <form onsubmit="handleLogin(event)" class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
-                        <input type="email" value="ana@detetive.com" class="w-full px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-noir-navy dark:focus:ring-noir-gold text-slate-900 dark:text-white" required>
+                        <label for="login-email" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
+                        <input id="login-email" type="email" value="ana@detetive.com" placeholder="ana@detetive.com" class="w-full px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-noir-navy dark:focus:ring-noir-gold text-slate-900 dark:text-white" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Senha</label>
-                        <input type="password" value="123456" class="w-full px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-noir-navy dark:focus:ring-noir-gold text-slate-900 dark:text-white" required>
+                        <label for="login-password" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Senha</label>
+                        <input id="login-password" type="password" value="123456" placeholder="Senha" class="w-full px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-noir-navy dark:focus:ring-noir-gold text-slate-900 dark:text-white" required>
                     </div>
                     <button type="submit" class="w-full bg-noir-navy dark:bg-noir-gold hover:bg-blue-800 dark:hover:bg-yellow-600 text-white dark:text-slate-900 font-bold py-3 rounded-lg transition-colors mt-6 shadow-lg">Entrar no Departamento</button>
                 </form>
@@ -164,7 +189,7 @@
                         <tbody class="divide-y divide-slate-200 dark:divide-slate-700 text-sm">
                             <tr class="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
                                 <td class="p-4 flex items-center gap-3">
-                                    <img src="https://i.pravatar.cc/150?img=11" class="w-8 h-8 rounded-full">
+                                    <img src="https://i.pravatar.cc/150?img=11" alt="Avatar de João" class="w-8 h-8 rounded-full">
                                     <span class="font-bold dark:text-white">João</span>
                                 </td>
                                 <td class="p-4"><span class="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded text-xs font-bold">Normal</span></td>
@@ -173,7 +198,7 @@
                             </tr>
                             <tr class="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
                                 <td class="p-4 flex items-center gap-3">
-                                    <img src="https://i.pravatar.cc/150?img=5" class="w-8 h-8 rounded-full">
+                                    <img src="https://i.pravatar.cc/150?img=5" alt="Avatar de Maria" class="w-8 h-8 rounded-full">
                                     <span class="font-bold dark:text-white">Maria</span>
                                 </td>
                                 <td class="p-4"><span class="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 px-2 py-1 rounded text-xs font-bold">Difícil (Memória)</span></td>
@@ -213,19 +238,19 @@
                             <li class="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700/50">
                                 <div class="w-6 text-center font-bold text-slate-400">1</div>
                                 <div class="relative">
-                                    <img src="https://i.pravatar.cc/150?img=32" class="w-10 h-10 rounded-full border-2 border-noir-navy dark:border-noir-gold">
+                                    <img src="https://i.pravatar.cc/150?img=32" alt="Avatar de Ana" class="w-10 h-10 rounded-full border-2 border-noir-navy dark:border-noir-gold">
                                     <span class="absolute -bottom-1 -right-1 bg-noir-navy dark:bg-noir-gold text-white dark:text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded">HOST</span>
                                 </div>
                                 <span class="font-bold dark:text-white">Ana (Você)</span>
                             </li>
                             <li class="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700/50">
                                 <div class="w-6 text-center font-bold text-slate-400">2</div>
-                                <img src="https://i.pravatar.cc/150?img=11" class="w-10 h-10 rounded-full border-2 border-transparent">
+                                <img src="https://i.pravatar.cc/150?img=11" alt="Avatar de João" class="w-10 h-10 rounded-full border-2 border-transparent">
                                 <span class="font-bold dark:text-white">João</span>
                             </li>
                             <li class="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700/50">
                                 <div class="w-6 text-center font-bold text-slate-400">3</div>
-                                <img src="https://i.pravatar.cc/150?img=5" class="w-10 h-10 rounded-full border-2 border-transparent">
+                                <img src="https://i.pravatar.cc/150?img=5" alt="Avatar de Maria" class="w-10 h-10 rounded-full border-2 border-transparent">
                                 <span class="font-bold dark:text-white">Maria</span>
                             </li>
                             <li class="flex items-center justify-center gap-3 p-3 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-noir-navy dark:hover:border-noir-gold transition-colors cursor-pointer text-slate-500" onclick="showToast('Bot Adicionado!', 'success')">
@@ -239,15 +264,15 @@
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Configurações da Sala</h3>
                         <div class="space-y-5">
                             <div>
-                                <label class="block text-sm font-medium dark:text-slate-300 mb-2">Dificuldade (Inteligência dos Bots)</label>
-                                <select class="w-full px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
+                                <label for="cfg-difficulty" class="block text-sm font-medium dark:text-slate-300 mb-2">Dificuldade (Inteligência dos Bots)</label>
+                                <select id="cfg-difficulty" class="w-full px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
                                     <option>Normal (Respostas Aleatórias)</option>
                                     <option>Difícil (Memória Estratégica)</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium dark:text-slate-300 mb-2">Bloco de Notas</label>
-                                <select class="w-full px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
+                                <label for="cfg-notes" class="block text-sm font-medium dark:text-slate-300 mb-2">Bloco de Notas</label>
+                                <select id="cfg-notes" class="w-full px-4 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
                                     <option>Manual (Clássico)</option>
                                     <option>Automático (Fácil)</option>
                                     <option>Sem Bloco (Hardcore)</option>
@@ -290,7 +315,7 @@
                     <!-- Oponente 1 -->
                     <div class="flex flex-col items-center opacity-50">
                         <div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-600 bg-slate-800 overflow-hidden shadow-xl">
-                            <img src="https://i.pravatar.cc/150?img=11" class="w-full h-full object-cover">
+                            <img src="https://i.pravatar.cc/150?img=11" alt="Avatar de João" class="w-full h-full object-cover">
                         </div>
                         <span class="mt-2 text-white font-bold text-sm bg-black/50 px-2 py-0.5 rounded">João</span>
                     </div>
@@ -298,7 +323,7 @@
                     <!-- Oponente 2 -->
                     <div class="flex flex-col items-center transform -translate-y-4">
                         <div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-600 bg-slate-800 overflow-hidden shadow-xl">
-                            <img src="https://i.pravatar.cc/150?img=5" class="w-full h-full object-cover">
+                            <img src="https://i.pravatar.cc/150?img=5" alt="Avatar de Maria" class="w-full h-full object-cover">
                         </div>
                         <span class="mt-2 text-white font-bold text-sm bg-black/50 px-2 py-0.5 rounded">Maria</span>
                     </div>
@@ -309,7 +334,7 @@
                     <div class="w-32 h-44 md:w-40 md:h-56 bg-[#cda434] rounded shadow-2xl border-2 border-[#8b6508] flex items-center justify-center transform -rotate-3 transition-transform group-hover:rotate-0 z-10 relative">
                         <div class="border-2 border-red-800/40 w-11/12 h-[95%] absolute p-2 flex flex-col items-center justify-center">
                             <i class="fa-solid fa-folder text-red-900/20 text-6xl absolute"></i>
-                            <h3 class="text-red-900 font-serif font-black text-xl text-center uppercase tracking-tighter leading-tight z-10" style="text-shadow: 1px 1px 0px rgba(255,255,255,0.3);">Arquivo<br>Confidencial</h3>
+                            <h3 class="text-red-900 font-serif font-black text-xl text-center uppercase tracking-tighter leading-tight z-10">Arquivo<br>Confidencial</h3>
                             <span class="absolute bottom-2 text-[10px] text-red-900/60 font-bold text-center mt-2">Clique para<br>Acusar</span>
                         </div>
                     </div>
@@ -415,7 +440,7 @@
             <aside id="notebook-drawer" class="fixed right-0 top-0 h-full w-80 bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 shadow-2xl z-50 drawer-closed transition-transform duration-300 ease-in-out flex flex-col">
                 <div class="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">
                     <h2 class="font-serif font-bold text-lg dark:text-white flex items-center gap-2"><i class="fa-solid fa-clipboard-list text-noir-navy dark:text-noir-gold"></i> Notas (Ana)</h2>
-                    <button onclick="toggleDrawer()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    <button onclick="toggleDrawer()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-2" title="Fechar notas" aria-label="Fechar notas"><i class="fa-solid fa-xmark text-xl" aria-hidden="true"></i></button>
                 </div>
                 
                 <div class="flex-1 overflow-y-auto p-4 bg-[url('https://www.transparenttextures.com/patterns/lined-paper.png')] dark:bg-none">
@@ -470,7 +495,7 @@
                     <p class="text-xs text-center font-bold text-red-500 uppercase">Selecione exatamente 2 itens diferentes:</p>
                     
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Suspeito</label>
+                        <label for="ask-suspect" class="block text-xs font-bold text-slate-500 uppercase mb-1">Suspeito</label>
                         <select id="ask-suspect" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border-none dark:text-white">
                             <option value="">--- Nenhum ---</option>
                             <option value="Sr. Marinho">Sr. Marinho</option>
@@ -478,7 +503,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Arma</label>
+                        <label for="ask-weapon" class="block text-xs font-bold text-slate-500 uppercase mb-1">Arma</label>
                         <select id="ask-weapon" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border-none dark:text-white">
                             <option value="">--- Nenhuma ---</option>
                             <option value="Corda">Corda</option>
@@ -486,7 +511,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Local</label>
+                        <label for="ask-location" class="block text-xs font-bold text-slate-500 uppercase mb-1">Local</label>
                         <select id="ask-location" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border-none dark:text-white">
                             <option value="">--- Nenhum ---</option>
                             <option value="Hall">Hall</option>
@@ -512,7 +537,7 @@
                         Se errar, você estará <strong class="text-red-600">eliminado</strong> do jogo e se tornará apenas um ouvinte.
                     </p>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">O Suspeito foi:</label>
+                        <label for="acc-suspect" class="block text-xs font-bold text-slate-500 uppercase mb-1">O Suspeito foi:</label>
                         <select id="acc-suspect" class="w-full p-2 rounded bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900 dark:text-white">
                             <option value="">Selecione...</option>
                             <option value="Sr. Marinho">Sr. Marinho</option>
@@ -521,7 +546,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Usando a Arma:</label>
+                        <label for="acc-weapon" class="block text-xs font-bold text-slate-500 uppercase mb-1">Usando a Arma:</label>
                         <select id="acc-weapon" class="w-full p-2 rounded bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900 dark:text-white">
                             <option value="">Selecione...</option>
                             <option value="Corda">Corda</option>
@@ -530,7 +555,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">No Local:</label>
+                        <label for="acc-location" class="block text-xs font-bold text-slate-500 uppercase mb-1">No Local:</label>
                         <select id="acc-location" class="w-full p-2 rounded bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-900 dark:text-white">
                             <option value="">Selecione...</option>
                             <option value="Hall">Hall</option>
@@ -551,7 +576,7 @@
             <h1 class="text-5xl md:text-7xl font-serif font-black text-green-500 tracking-tighter uppercase mb-2 transform -rotate-2 border-4 border-green-500 p-4 inline-block shadow-[0_0_50px_rgba(34,197,94,0.5)]">Caso Resolvido</h1>
             
             <div class="mt-8 flex flex-col items-center animate-bounce">
-                <img src="https://i.pravatar.cc/150?img=32" class="w-24 h-24 rounded-full border-4 border-noir-gold shadow-[0_0_30px_rgba(212,175,55,0.6)]">
+                <img src="https://i.pravatar.cc/150?img=32" alt="Avatar de Ana" class="w-24 h-24 rounded-full border-4 border-noir-gold shadow-[0_0_30px_rgba(212,175,55,0.6)]">
                 <p class="text-white text-xl mt-4">Vencedor: <span class="font-bold text-noir-gold">Ana</span></p>
             </div>
 
@@ -596,7 +621,7 @@
             <!-- Card de Posição do Usuário no Topo -->
             <div class="bg-gradient-to-r from-noir-gold/20 to-yellow-600/10 border border-noir-gold/50 rounded-xl p-5 mb-8 flex items-center justify-between shadow-lg">
                 <div class="flex items-center gap-4">
-                    <img src="https://i.pravatar.cc/150?img=32" class="w-14 h-14 rounded-full border-2 border-noir-gold">
+                    <img src="https://i.pravatar.cc/150?img=32" alt="Avatar de Ana" class="w-14 h-14 rounded-full border-2 border-noir-gold">
                     <div>
                         <span class="text-xs text-noir-gold dark:text-yellow-500 uppercase font-black tracking-widest">Sua Classificação</span><br>
                         <span class="text-2xl font-bold text-slate-800 dark:text-white">3º Lugar</span>
@@ -618,7 +643,7 @@
                 <div class="flex items-center p-4 border-b border-slate-100 dark:border-slate-700/50 bg-yellow-50/50 dark:bg-yellow-900/10">
                     <div class="w-12 text-center font-black text-2xl text-yellow-500">1</div>
                     <div class="flex-1 flex items-center gap-3">
-                        <img src="https://i.pravatar.cc/150?img=68" class="w-10 h-10 rounded-full border-2 border-yellow-400">
+                        <img src="https://i.pravatar.cc/150?img=68" alt="Avatar de Sherlock Web" class="w-10 h-10 rounded-full border-2 border-yellow-400">
                         <span class="font-bold text-lg dark:text-white">Sherlock Web</span>
                     </div>
                     <div class="w-24 text-right font-black text-xl text-slate-800 dark:text-white">142</div>
@@ -627,7 +652,7 @@
                 <div class="flex items-center p-4 border-b border-slate-100 dark:border-slate-700/50">
                     <div class="w-12 text-center font-black text-xl text-slate-400">2</div>
                     <div class="flex-1 flex items-center gap-3">
-                        <img src="https://i.pravatar.cc/150?img=47" class="w-8 h-8 rounded-full border border-slate-300">
+                        <img src="https://i.pravatar.cc/150?img=47" alt="Avatar de Inspetor Carlos" class="w-8 h-8 rounded-full border border-slate-300">
                         <span class="font-bold dark:text-white">Inspetor Carlos</span>
                     </div>
                     <div class="w-24 text-right font-bold text-slate-700 dark:text-slate-300">98</div>
@@ -636,7 +661,7 @@
                 <div class="flex items-center p-4 border-b border-slate-100 dark:border-slate-700/50">
                     <div class="w-12 text-center font-black text-xl text-orange-400">3</div>
                     <div class="flex-1 flex items-center gap-3">
-                        <img src="https://i.pravatar.cc/150?img=32" class="w-8 h-8 rounded-full border border-slate-300">
+                        <img src="https://i.pravatar.cc/150?img=32" alt="Avatar de Ana" class="w-8 h-8 rounded-full border border-slate-300">
                         <span class="font-bold dark:text-white">Ana (Você)</span>
                     </div>
                     <div class="w-24 text-right font-bold text-slate-700 dark:text-slate-300">24</div>
@@ -672,8 +697,8 @@
                             <td class="p-4 font-bold dark:text-white">Cel. Mostarda</td>
                             <td class="p-4"><span class="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs font-bold text-slate-600 dark:text-slate-300">SUSPEITO</span></td>
                             <td class="p-4 text-right">
-                                <button onclick="openAdminCardModal(true)" class="text-blue-500 hover:text-blue-700 mr-3"><i class="fa-solid fa-pen"></i></button>
-                                <button onclick="openDeleteConfirmModal()" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+                                <button onclick="openAdminCardModal(true)" class="text-blue-500 hover:text-blue-700 mr-3" title="Editar carta" aria-label="Editar carta"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+                                <button onclick="openDeleteConfirmModal()" class="text-red-500 hover:text-red-700" title="Excluir carta" aria-label="Excluir carta"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
                             </td>
                         </tr>
                         <tr>
@@ -681,8 +706,8 @@
                             <td class="p-4 font-bold dark:text-white">Revólver</td>
                             <td class="p-4"><span class="bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded text-xs font-bold text-slate-600 dark:text-slate-300">ARMA</span></td>
                             <td class="p-4 text-right">
-                                <button onclick="openAdminCardModal(true)" class="text-blue-500 hover:text-blue-700 mr-3"><i class="fa-solid fa-pen"></i></button>
-                                <button onclick="openDeleteConfirmModal()" class="text-red-500 hover:text-red-700"><i class="fa-solid fa-trash"></i></button>
+                                <button onclick="openAdminCardModal(true)" class="text-blue-500 hover:text-blue-700 mr-3" title="Editar carta" aria-label="Editar carta"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>
+                                <button onclick="openDeleteConfirmModal()" class="text-red-500 hover:text-red-700" title="Excluir carta" aria-label="Excluir carta"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
                             </td>
                         </tr>
                     </tbody>
@@ -698,12 +723,12 @@
                 </div>
                 <div class="p-4 space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
-                        <input type="text" placeholder="Ex: Sr. Marinho" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
+                        <label for="admin-card-name" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome</label>
+                        <input id="admin-card-name" type="text" placeholder="Ex: Sr. Marinho" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo</label>
-                        <select class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
+                        <label for="admin-card-type" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tipo</label>
+                        <select id="admin-card-type" class="w-full p-2 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none dark:text-white">
                             <option>Suspeito</option>
                             <option>Arma</option>
                             <option>Local</option>

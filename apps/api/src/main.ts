@@ -41,8 +41,21 @@ async function bootstrap() {
       allowedHeaders: 'Content-Type,Authorization,Accept',
     });
   } else {
+    // In development, allow a small whitelist (supports comma-separated FRONTEND_URL)
+    const frontendEnv =
+      configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const allowedOrigins = frontendEnv
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     app.enableCors({
-      origin: true, // reflect request origin
+      origin: (origin, callback) => {
+        // allow requests with no origin (server-to-server, curl, etc.)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(null, false);
+      },
       credentials: true,
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
       allowedHeaders: 'Content-Type,Authorization,Accept',

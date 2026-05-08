@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Special+Elite&display=swap');
+/* Fonts are loaded in app/layout.tsx to apply globally */
 
 @tailwind base;
 @tailwind components;
@@ -10,6 +10,13 @@
   --clue-yellow: #e6d5b8;
   --clue-red: #8b0000;
   --clue-dark: #1a1a1a;
+}
+
+/* Prevent mobile/Safari from auto-scaling text */
+:root, html, :host, body {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -74,6 +81,8 @@ body {
   font-weight: bold;
   transform: rotate(-12deg);
   opacity: 0.85;
+  -webkit-user-select: none;
+  -moz-user-select: none;
   user-select: none;
 }
 
@@ -85,6 +94,8 @@ body {
   font-weight: bold;
   transform: rotate(8deg);
   opacity: 0.8;
+  -webkit-user-select: none;
+  -moz-user-select: none;
   user-select: none;
 }
 
@@ -129,6 +140,13 @@ button, input, select { font: inherit; }
   border-bottom: 1px solid rgba(0,0,0,0.05);
   padding: 4px 0;
   color: #1b1a16;
+}
+
+/* Backdrop-filter compatibility for Safari/iOS */
+.modal-overlay,
+[data-nextjs-dialog-backdrop-fixed] {
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
 }
 
 /* Custom Scrollbar (matches prototype) */

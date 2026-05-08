@@ -500,7 +500,10 @@ export class PartidasService {
       // non-host leaving: simply remove the jogador to free the slot
       await this.jogadoresRepository.remove(jogador);
 
-      return this.findOne(id, usuarioId);
+      // don't call `findOne` here — the usuario is no longer a member
+      // and `findOne` would hide the partida. Return a fresh snapshot
+      // built from current DB state instead.
+      return this.buildPartidaResponse(partida, usuarioId);
     }
 
     // If partida already started, convert the player slot to a bot and count an abandonment
@@ -541,7 +544,11 @@ export class PartidasService {
       }
     });
 
-    return this.findOne(id, usuarioId);
+    // Return an updated snapshot rather than calling `findOne`, since
+    // the requesting usuario may no longer be associated with a jogador
+    // (converted to bot / removed). `buildPartidaResponse` will reload
+    // players and present the current state.
+    return this.buildPartidaResponse(partida, usuarioId);
   }
 
   async addBot(id: string, usuarioId: string): Promise<PartidaResponse> {

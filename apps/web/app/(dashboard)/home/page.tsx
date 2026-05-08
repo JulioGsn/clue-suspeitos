@@ -13,7 +13,6 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import Head from "next/head";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
@@ -74,6 +73,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
     void (async () => {
       try {
         await loadPartidas();
@@ -86,16 +86,17 @@ export default function DashboardPage() {
 
       try {
         const me = await api.me();
+        if (!mounted) return;
         setRemoteUser(me);
         if (me?.currentPartidaId) {
           try {
             const p = await api.getPartida(undefined, me.currentPartidaId);
-            setCurrentPartida(p);
+            if (mounted) setCurrentPartida(p);
           } catch {
-            setCurrentPartida(null);
+            if (mounted) setCurrentPartida(null);
           }
         } else {
-          setCurrentPartida(null);
+          if (mounted) setCurrentPartida(null);
         }
       } catch {
         // ignore
@@ -105,15 +106,19 @@ export default function DashboardPage() {
         const temasList = await api.listTemas();
         if (Array.isArray(temasList) && temasList.length) {
           setTemas(temasList as any);
-          // set default temaId if not set
-          if (!temaId && temasList[0]?.id) setTemaId(temasList[0].id);
+          setTemaId((curr) => curr || (temasList[0]?.id ?? ""));
         }
       } catch {
         // ignore - backend may not expose temas endpoint in early stages
       }
     })();
-    // Poll partidas every 10s when user is not in a partida
-    // Countdown updates every second and triggers a background refresh at 0.
+
+    return () => {
+      mounted = false;
+    };
+  }, [loadPartidas, router]);
+
+  useEffect(() => {
     if (!remoteUser?.currentPartidaId) {
       setCountdown(10);
       const id = setInterval(() => {
@@ -127,7 +132,8 @@ export default function DashboardPage() {
       }, 1000);
       return () => clearInterval(id);
     }
-  }, [loadPartidas, router]);
+    return undefined;
+  }, [remoteUser?.currentPartidaId, loadPartidas]);
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -317,9 +323,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Head>
-        <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet" />
-      </Head>
+      
 
       <div className="fixed top-0 left-0 w-full h-8 crime-tape flex items-center justify-center z-50 shadow-md">
         <span className="text-white font-bold tracking-[0.3em] text-[10px] uppercase">
@@ -421,8 +425,8 @@ export default function DashboardPage() {
               <div className="bg-stone-200 border-2 border-stone-400 p-6 shadow-lg rotate-1">
                 <h3 className="special-elite text-xl text-stone-800 mb-2 uppercase tracking-tighter">Dossiê Privado</h3>
                 <p className="text-[9px] text-stone-500 uppercase font-bold mb-4">Insira o selo de acesso para entrar em casos fechados</p>
-                <div className="space-y-3">
-                  <input value={joinId} onChange={(e) => setJoinId(e.target.value)} type="text" placeholder="CÓDIGO-DO-CASO" className="w-full p-3 bg-white border border-stone-300 text-center font-bold tracking-widest uppercase placeholder-stone-300 outline-none focus:border-red-800 transition-colors" />
+                  <div className="space-y-3">
+                  <input id="join-code" aria-label="Código do caso" value={joinId} onChange={(e) => setJoinId(e.target.value)} type="text" placeholder="CÓDIGO-DO-CASO" className="w-full p-3 bg-white border border-stone-300 text-center font-bold tracking-widest uppercase placeholder-stone-300 outline-none focus:border-red-800 transition-colors" />
                   <button onClick={async () => {
                     setError(null);
                     setNotice(null);
@@ -525,15 +529,15 @@ export default function DashboardPage() {
                 <div className="p-3 bg-yellow-200 text-black font-bold text-sm rounded">{notice}</div>
               ) : null}
               <div>
-                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Tema das Cartas</label>
+                <label htmlFor="theme-select" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Tema das Cartas</label>
                 {temas.length ? (
-                  <select name="theme" value={temaId} onChange={(e) => setTemaId(e.target.value)} className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
+                  <select id="theme-select" name="theme" value={temaId} onChange={(e) => setTemaId(e.target.value)} className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
                     {temas.map((t) => (
                       <option key={t.id} value={t.id}>{t.nome}</option>
                     ))}
                   </select>
                 ) : (
-                  <select name="theme" defaultValue="classic" className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
+                  <select id="theme-select" name="theme" defaultValue="classic" className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
                     <option value="classic">Mansão Tudor (Clássico)</option>
                     <option value="simpsons">Springfield (Simpsons)</option>
                     <option value="got">Westeros (Game of Thrones)</option>
@@ -543,12 +547,12 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Qtd. Agentes (2-5)</label>
-                  <input name="maxPlayers" type="number" min="2" max="5" defaultValue={4} className="w-full input-classic p-3 text-stone-800 font-bold outline-none" />
+                  <label htmlFor="maxPlayersInput" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Qtd. Agentes (2-5)</label>
+                    <input id="maxPlayersInput" name="maxPlayers" type="number" min="2" max="5" defaultValue={4} className="w-full input-classic p-3 text-stone-800 font-bold outline-none" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Visibilidade</label>
-                  <select name="privacy" onChange={(e) => { if ((e.target as HTMLSelectElement).value === 'private') generateCode(); else setGeneratedCode(null); }} className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
+                  <label htmlFor="privacy-select" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Visibilidade</label>
+                  <select id="privacy-select" name="privacy" onChange={(e) => { if ((e.target as HTMLSelectElement).value === 'private') generateCode(); else setGeneratedCode(null); }} className="w-full input-classic p-3 text-stone-800 font-bold outline-none">
                     <option value="public">Público</option>
                     <option value="private">Privado (Com Código)</option>
                   </select>
@@ -643,6 +647,7 @@ export default function DashboardPage() {
 
         .modal-overlay {
           background: rgba(0, 0, 0, 0.85);
+          -webkit-backdrop-filter: blur(5px);
           backdrop-filter: blur(5px);
         }
 

@@ -13,9 +13,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           try {
             if (!req || typeof req !== 'object') return null;
             const r = req as { cookies?: Record<string, unknown> };
-            const token = r.cookies && typeof r.cookies === 'object'
-              ? (r.cookies as Record<string, unknown>)['detetive_access_token']
-              : undefined;
+            const token =
+              r.cookies && typeof r.cookies === 'object'
+                ? r.cookies['detetive_access_token']
+                : undefined;
             return typeof token === 'string' ? token : null;
           } catch {
             return null;

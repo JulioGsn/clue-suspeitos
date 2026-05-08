@@ -149,7 +149,7 @@ export class PartidasController {
     }
 
     // register SSE stream for this partida (service will validate membership)
-    this.partidasService.registerChatStream(
+    void this.partidasService.registerChatStream(
       id,
       req.user?.usuarioId ?? null,
       res,

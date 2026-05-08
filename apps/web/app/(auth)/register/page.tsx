@@ -16,7 +16,6 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
 
   const folderRef = useRef<HTMLDivElement | null>(null);
-  const [tilt, setTilt] = useState({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
 
   const { register } = useAuth();
 
@@ -25,11 +24,11 @@ export default function RegisterPage() {
     const rect = folderRef.current.getBoundingClientRect();
     const x = (e.clientX - (rect.left + rect.width / 2)) / 50;
     const y = (e.clientY - (rect.top + rect.height / 2)) / 50;
-    setTilt({ transform: `perspective(1000px) rotateY(${x}deg) rotateX(${-y}deg)` });
+    try { folderRef.current.style.transform = `perspective(1000px) rotateY(${x}deg) rotateX(${-y}deg)`; } catch {}
   }
 
   function onMouseLeave() {
-    setTilt({ transform: "perspective(1000px) rotateY(0deg) rotateX(0deg)" });
+    try { if (folderRef.current) folderRef.current.style.transform = "perspective(1000px) rotateY(0deg) rotateX(0deg)"; } catch {}
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -53,7 +52,7 @@ export default function RegisterPage() {
       </div>
 
       <div className="w-full px-4 py-8 flex items-center justify-center">
-        <div className="folder-container mx-auto w-full max-w-7xl p-12 md:p-20" ref={folderRef} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} style={tilt as React.CSSProperties}>
+        <div className="folder-container mx-auto w-full max-w-7xl p-12 md:p-20" ref={folderRef} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
           {/* Clipe de papel visual */}
           <div className="absolute -top-6 left-1/4 w-10 h-24 bg-zinc-400 rounded-full opacity-40 border-4 border-zinc-500 pointer-events-none hidden md:block"></div>
 

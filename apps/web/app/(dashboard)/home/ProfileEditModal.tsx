@@ -222,7 +222,7 @@ export default function ProfileEditModal({ user, onClose, onUpdated }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Avatar</label>
+            <label htmlFor="avatar-input" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-2">Avatar</label>
             <div
               ref={dropRef}
               onDragOver={handleDragOver}
@@ -253,7 +253,7 @@ export default function ProfileEditModal({ user, onClose, onUpdated }: Props) {
                 ) : null}
               </div>
               <div className="flex-1">
-                <input type="file" accept="image/*" onChange={(ev) => onSelectFile(ev.target.files)} />
+                <input id="avatar-input" name="avatar" type="file" accept="image/*" onChange={(ev) => onSelectFile(ev.target.files)} />
                 <div className="text-xs text-stone-500 mt-1">Arraste e solte ou clique para selecionar</div>
                 {avatarFile ? (
                   <div className="mt-2 text-xs text-stone-600">
@@ -269,18 +269,18 @@ export default function ProfileEditModal({ user, onClose, onUpdated }: Props) {
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Nome</label>
-            <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
+            <label htmlFor="profile-username" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Nome</label>
+            <input id="profile-username" name="username" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Nova senha (opcional)</label>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
+            <label htmlFor="profile-newPassword" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Nova senha (opcional)</label>
+            <input id="profile-newPassword" name="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Senha atual (necessária apenas se trocar senha)</label>
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
+            <label htmlFor="profile-currentPassword" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Senha atual (necessária apenas se trocar senha)</label>
+            <input id="profile-currentPassword" name="currentPassword" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className="w-full input-classic p-3 text-stone-800" />
           </div>
 
           {error ? <div className="text-red-600 text-sm">{error}</div> : null}

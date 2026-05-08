@@ -377,10 +377,17 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
 
               <div className="flex gap-2 border-t border-stone-200 pt-4">
                 <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} type="text" id="chat-input" placeholder="Diga algo..." className="flex-1 p-2 bg-stone-100 border border-stone-300 outline-none focus:border-red-800 text-xs text-stone-900 placeholder:text-stone-400" onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }} />
-                <button onClick={sendMessage} className="bg-stone-800 text-white px-4 py-2 hover:bg-red-800 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button
+                  type="button"
+                  onClick={sendMessage}
+                  aria-label="Enviar mensagem"
+                  title="Enviar mensagem"
+                  className="bg-stone-800 text-white px-4 py-2 hover:bg-red-800 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
+                  <span className="sr-only">Enviar mensagem</span>
                 </button>
               </div>
             </div>
