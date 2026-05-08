@@ -173,6 +173,23 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
           }
           return [...s, { author: payload.author, text: payload.text }];
         });
+        // After receiving any SSE chat event, ensure we refresh partida status
+        (async () => {
+          try {
+            const fresh = await api.getPartida(undefined, partidaId);
+            if (fresh && fresh.status === 'EM_ANDAMENTO') {
+              setPartida(fresh);
+              setPlayers(fresh.jogadores ?? []);
+              try { router.push('/game'); } catch (e) {}
+            } else {
+              // update local partida info if changed
+              setPartida(fresh);
+              setPlayers(fresh.jogadores ?? []);
+            }
+          } catch (e) {
+            // ignore fetch errors here
+          }
+        })();
       } catch (err) {
         // ignore
       }
@@ -190,6 +207,29 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
       // ignore if addEventListener not supported
     }
 
+    // Listen for explicit partida events (backend may emit these)
+    try {
+      const handlePartidaEvent = async (ev: any) => {
+        try {
+          // try to fetch latest partida state and redirect if started
+          const fresh = await api.getPartida(undefined, partidaId);
+          setPartida(fresh);
+          setPlayers(fresh.jogadores ?? []);
+          if (fresh && fresh.status === 'EM_ANDAMENTO') {
+            try { router.push('/game'); } catch (e) {}
+          }
+        } catch (err) {
+          // ignore
+        }
+      };
+
+      es.addEventListener('partida_started', handlePartidaEvent as any);
+      es.addEventListener('partida_iniciada', handlePartidaEvent as any);
+      es.addEventListener('partida_updated', handlePartidaEvent as any);
+    } catch (e) {
+      // ignore if addEventListener not supported
+    }
+
     es.onerror = () => {
       // keep trying; no-op
     };
@@ -200,6 +240,24 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
       } catch {}
     };
   }, [partidaId, router]);
+
+  // Ensure lobby uses the same background/tone as /home and /game
+  useEffect(() => {
+    const id = 'lobby-theme-overrides';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.innerHTML = `
+      :root { --clue-dark: #1a1a1a; --clue-yellow: #e6d5b8; --clue-red: #8b0000; --paper-bg: #fdf6e3; --accent-red: #8b0000; }
+      html, body, #__next, .min-h-screen, .h-screen, main { background-image: radial-gradient(circle,#2a2a2a 1px,transparent 1px) !important; background-size:30px 30px !important; background-color: var(--clue-dark) !important; color: #e6e6e6 !important; }
+      body { font-family: 'Courier Prime', monospace; }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      try { style.remove(); } catch {}
+    };
+  }, []);
 
   // Detect newly joined players and append a thematic auto-message
   useEffect(() => {
@@ -256,6 +314,17 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
       setPendingAction(null);
     }
   }
+
+  // Redirect to game page when the partida status changes to 'EM_ANDAMENTO'
+  useEffect(() => {
+    if (partida?.status === 'EM_ANDAMENTO') {
+      try {
+        router.push('/game');
+      } catch (e) {
+        // ignore navigation errors
+      }
+    }
+  }, [partida?.status, router]);
 
   function sendMessage() {
     const text = chatInput.trim();
@@ -397,7 +466,7 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
 
       <div className="fixed bottom-0 left-0 w-full h-8 crime-tape flex items-center justify-center z-50 border-t border-black">
         <span className="text-white font-bold tracking-[0.2em] text-[10px] uppercase">
-          PRINCIPAIS SUSPEITOS: {players?.slice(0,2).map(j => (j?.username ?? j?.email?.split('@')[0] ?? 'DESCONHECIDO').toUpperCase()).join(' & ') || 'JALES MONTEIRO & JÚLIO GOMES'}
+          PRINCIPAIS SUSPEITOS: {players?.slice(0,2).map(j => (j?.username ?? j?.email?.split('@')[0] ?? 'DESCONHECIDO').toUpperCase()).join(' & ') || 'JALES MONTEIRO - JÚLIO GOMES'}
         </span>
       </div>
     </main>

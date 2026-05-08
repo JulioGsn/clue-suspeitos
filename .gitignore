@@ -27,3 +27,4 @@ pnpm-debug.log*
 
 #others
 temp/
+apps/api/uploads/

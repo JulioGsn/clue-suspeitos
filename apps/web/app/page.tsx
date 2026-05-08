@@ -9,6 +9,8 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 const highlights = [
   { title: "JWT", detail: "Login e cadastro conectados", Icon: ShieldCheck },
@@ -17,6 +19,12 @@ const highlights = [
 ];
 
 export default function Home() {
+  const tokenCookie = cookies().get('detetive_access_token');
+  if (tokenCookie && tokenCookie.value) {
+    // If server-side cookie exists, redirect to the authenticated dashboard route
+    // The dashboard UI lives under the 'home' route (grouped under (dashboard)), so use '/home'
+    redirect('/home');
+  }
   return (
     <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(234,179,8,0.18),transparent_32rem),linear-gradient(135deg,#10261c,#1a3b2b_42%,#2c1e16)] text-noir-paper">
       <section className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-10 px-5 py-8 md:grid-cols-[1.02fr_0.98fr] md:px-8 lg:px-10">
