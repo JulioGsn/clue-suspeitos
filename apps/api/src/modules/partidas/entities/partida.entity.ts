@@ -17,6 +17,11 @@ export enum StatusPartida {
   FINALIZADA = 'FINALIZADA',
 }
 
+export enum VisibilidadePartida {
+  PUBLIC = 'PUBLIC',
+  PRIVATE = 'PRIVATE',
+}
+
 @Entity('partidas')
 @Check(
   'CHK_partidas_max_jogadores',
@@ -84,6 +89,23 @@ export class Partida {
 
   @Column({ name: 'turno_atual', type: 'int', default: 1 })
   turnoAtual!: number;
+
+  @Column({
+    name: 'codigo',
+    type: 'varchar',
+    length: 12,
+    nullable: true,
+    unique: true,
+  })
+  codigo!: string | null;
+
+  @Column({
+    name: 'visibilidade',
+    type: 'enum',
+    enum: VisibilidadePartida,
+    default: VisibilidadePartida.PRIVATE,
+  })
+  visibilidade!: VisibilidadePartida;
 
   @CreateDateColumn({ name: 'criado_em' })
   criadoEm!: Date;

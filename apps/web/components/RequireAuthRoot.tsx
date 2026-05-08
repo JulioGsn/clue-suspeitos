@@ -2,16 +2,22 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/services/api";
+import { api } from "@/services/api";
 
 export default function RequireAuthRoot() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      router.replace("/login");
-    }
+    void (async () => {
+      try {
+        const me = await api.me();
+        if (!me) {
+          router.replace("/login");
+        }
+      } catch {
+        router.replace("/login");
+      }
+    })();
   }, [router]);
 
   return null;

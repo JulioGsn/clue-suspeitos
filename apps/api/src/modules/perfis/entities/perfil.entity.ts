@@ -30,4 +30,7 @@ export class Perfil {
 
   @Column({ default: 0 })
   derrotas!: number;
+
+  @Column({ default: 0 })
+  abandonos!: number;
 }

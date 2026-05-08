@@ -15,7 +15,14 @@ export default function useAuth() {
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    setUser(getStoredUser());
+    void (async () => {
+      try {
+        const me = await api.me();
+        setUser(me as AuthUser);
+      } catch {
+        setUser(getStoredUser());
+      }
+    })();
   }, []);
 
   async function login(email: string, password: string) {

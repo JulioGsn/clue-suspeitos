@@ -94,3 +94,44 @@ body {
 button, input, select { font: inherit; }
 
 ::selection { background: #f97316; color: #ffffff; }
+
+/* Protótipo: Lobby-specific styles */
+.chat-container {
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid #c5b599;
+  height: 350px;
+}
+
+.agent-slot {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid #c5b599;
+  transition: all 0.3s;
+  color: #1b1a16;
+}
+
+.agent-slot.empty {
+  border: 2px dashed #b5a589;
+  background: transparent;
+  opacity: 0.6;
+}
+
+.stamp-status {
+  border: 3px solid var(--clue-red);
+  color: var(--clue-red);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  font-weight: bold;
+  transform: rotate(-10deg);
+  display: inline-block;
+}
+
+.message {
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding: 4px 0;
+  color: #1b1a16;
+}
+
+/* Custom Scrollbar (matches prototype) */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #d4c3a3; }
+::-webkit-scrollbar-thumb { background: #8b0000; }

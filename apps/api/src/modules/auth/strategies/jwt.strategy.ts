@@ -8,7 +8,21 @@ import { JwtPayload, AuthenticatedUser } from '../types/authenticated-user';
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: unknown) => {
+          try {
+            if (!req || typeof req !== 'object') return null;
+            const r = req as { cookies?: Record<string, unknown> };
+            const token = r.cookies && typeof r.cookies === 'object'
+              ? (r.cookies as Record<string, unknown>)['detetive_access_token']
+              : undefined;
+            return typeof token === 'string' ? token : null;
+          } catch {
+            return null;
+          }
+        },
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET', 'dev-secret'),
     });

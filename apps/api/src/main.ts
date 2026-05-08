@@ -3,11 +3,15 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import cookieParser from 'cookie-parser';
+import * as express from 'express';
+import { join } from 'path';
+import { mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  // Do not enable permissive CORS here; configure below with explicit origin.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -23,8 +27,40 @@ async function bootstrap() {
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, documentFactory);
-
   const configService = app.get(ConfigService);
+  const frontend =
+    configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+  // Enable CORS with credentials. In production, restrict to configured frontend.
+  // In development, allow reflected origins to ease local testing (supports http/https variants).
+  const isProd = process.env.NODE_ENV === 'production';
+  if (isProd) {
+    app.enableCors({
+      origin: frontend,
+      credentials: true,
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+      allowedHeaders: 'Content-Type,Authorization,Accept',
+    });
+  } else {
+    app.enableCors({
+      origin: true, // reflect request origin
+      credentials: true,
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+      allowedHeaders: 'Content-Type,Authorization,Accept',
+    });
+  }
+  // Parse incoming cookies so JwtStrategy can read HttpOnly cookie
+  app.use(cookieParser());
+
+  // Ensure uploads directory exists and serve it under /uploads
+  try {
+    const uploadsDir = join(__dirname, '..', 'uploads');
+    const avatarsDir = join(uploadsDir, 'avatars');
+    mkdirSync(avatarsDir, { recursive: true });
+    app.use('/uploads', express.static(uploadsDir));
+  } catch (err: unknown) {
+    void err;
+  }
+
   const port = Number(configService.get('PORT')) || 3001;
   await app.listen(port);
 }

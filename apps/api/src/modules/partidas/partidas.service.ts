@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import type { Response } from 'express';
 import { Carta, TipoCarta } from '../cartas/entities/carta.entity';
 import { Jogador } from '../jogadores/entities/jogador.entity';
 import { MaoCarta } from '../mao-cartas/entities/mao-carta.entity';
@@ -13,6 +14,7 @@ import { Pergunta } from '../perguntas/entities/pergunta.entity';
 import { Tema } from '../temas/entities/tema.entity';
 import { Perfil } from '../perfis/entities/perfil.entity';
 import { Usuario } from '../usuarios/entities/usuario.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { CreateAcusacaoDto } from './dto/create-acusacao.dto';
 import { CreatePartidaDto } from './dto/create-partida.dto';
 import { CreatePerguntaDto } from './dto/create-pergunta.dto';
@@ -26,10 +28,18 @@ import {
   PartidaResponse,
 } from './dto/partida-response.dto';
 import { UpdateBlocoNotasDto } from './dto/update-bloco-notas.dto';
-import { Partida, StatusPartida } from './entities/partida.entity';
+import {
+  Partida,
+  StatusPartida,
+  VisibilidadePartida,
+} from './entities/partida.entity';
 
 @Injectable()
 export class PartidasService {
+  // map of partidaId => set of SSE response objects
+  private chatStreams: Map<string, Set<Response>> = new Map();
+  // in-memory chat history per partida (capped)
+  private chatHistory: Map<string, Array<unknown>> = new Map();
   constructor(
     @InjectDataSource()
     private readonly dataSource: DataSource,
@@ -45,6 +55,8 @@ export class PartidasService {
     private readonly cartasRepository: Repository<Carta>,
     @InjectRepository(MaoCarta)
     private readonly maoCartasRepository: Repository<MaoCarta>,
+    @InjectRepository(ChatMessage)
+    private readonly chatMessageRepository: Repository<ChatMessage>,
   ) {}
 
   async create(
@@ -61,6 +73,9 @@ export class PartidasService {
     }
 
     const maxJogadores = createPartidaDto.maxJogadores ?? 4;
+    const visibilidade: VisibilidadePartida =
+      (createPartidaDto.visibilidade as VisibilidadePartida) ??
+      VisibilidadePartida.PRIVATE;
 
     const partida = await this.dataSource.transaction(async (manager) => {
       const partidaRepository = manager.getRepository(Partida);
@@ -74,8 +89,17 @@ export class PartidasService {
           status: StatusPartida.LOBBY,
           turnoAtual: 1,
           cartasReveladas: [],
+          visibilidade,
+          codigo: null,
         }),
       );
+
+      // If private (with code), generate a unique code and persist
+      if (visibilidade === VisibilidadePartida.PRIVATE) {
+        const code = await this.generateUniqueCode(6);
+        createdPartida.codigo = code;
+        await partidaRepository.save(createdPartida);
+      }
 
       await jogadorRepository.save(
         jogadorRepository.create({
@@ -94,13 +118,38 @@ export class PartidasService {
     return this.findOne(partida.id, usuarioId);
   }
 
+  private async generateUniqueCode(length = 6) {
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const make = () =>
+      Array.from({ length })
+        .map(() => alphabet[Math.floor(Math.random() * alphabet.length)])
+        .join('');
+
+    for (let i = 0; i < 10; i++) {
+      const code = make();
+      const exists = await this.partidasRepository.findOne({
+        where: { codigo: code },
+      });
+      if (!exists) return code;
+    }
+
+    // fallback to longer attempts
+    while (true) {
+      const code = make();
+      const exists = await this.partidasRepository.findOne({
+        where: { codigo: code },
+      });
+      if (!exists) return code;
+    }
+  }
+
   async findLobby(usuarioId?: string): Promise<PartidaResponse[]> {
     const partidas = await this.partidasRepository.find({
       where: { status: StatusPartida.LOBBY },
       relations: {
-        anfitriao: true,
+        anfitriao: { perfil: true },
         tema: true,
-        vencedor: true,
+        vencedor: { perfil: true },
       },
       order: { criadoEm: 'ASC' },
     });
@@ -112,6 +161,40 @@ export class PartidasService {
 
   async findOne(id: string, usuarioId?: string): Promise<PartidaResponse> {
     const partida = await this.findPartidaOrFail(id);
+
+    // debug logs to investigate unauthorized access reports
+    try {
+      console.debug(
+        `[partidas.findOne] id=${id} usuarioId=${usuarioId ?? 'null'} visibilidade=${partida.visibilidade} anfitriaoId=${partida.anfitriao?.id ?? 'none'}`,
+      );
+    } catch (e: unknown) {
+      void e;
+    }
+
+    // Require membership for ALL partidas: only anfitriao or jogadores can view
+    if (!usuarioId) {
+      throw new NotFoundException('Partida nao encontrada');
+    }
+
+    if (partida.anfitriao?.id !== usuarioId) {
+      const jogador = await this.jogadoresRepository.findOne({
+        where: { partida: { id }, usuario: { id: usuarioId } },
+      });
+
+      try {
+        console.debug(
+          `[partidas.findOne] checked jogador membership for usuarioId=${usuarioId} exists=${!!jogador}`,
+        );
+      } catch (e: unknown) {
+        void e;
+      }
+
+      if (!jogador) {
+        // hide existence for non-members
+        throw new NotFoundException('Partida nao encontrada');
+      }
+    }
+
     return this.buildPartidaResponse(partida, usuarioId);
   }
 
@@ -146,6 +229,317 @@ export class PartidasService {
         blocoDeNotas: {},
       }),
     );
+
+    return this.findOne(id, usuarioId);
+  }
+
+  async entrarPorCodigo(
+    codigo: string,
+    usuarioId: string,
+  ): Promise<PartidaResponse> {
+    if (!codigo || !codigo.trim()) {
+      throw new NotFoundException('Partida nao encontrada');
+    }
+
+    const partida = await this.partidasRepository.findOne({
+      where: { codigo },
+    });
+    if (!partida) throw new NotFoundException('Partida nao encontrada');
+
+    return this.entrar(partida.id, usuarioId);
+  }
+
+  // Chat / SSE support
+  async registerChatStream(
+    partidaId: string,
+    usuarioId: string | null,
+    res: Response,
+  ): Promise<void> {
+    // verify partida exists and that this usuario is linked to it
+    try {
+      const partida = await this.findPartidaOrFail(partidaId);
+
+      if (!usuarioId) {
+        try {
+          res.statusCode = 401;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ message: 'Unauthorized' }));
+        } catch (innerErr: unknown) {
+          void innerErr;
+        }
+        return;
+      }
+
+      // host may always view; otherwise ensure the usuario is a jogador
+      if (partida.anfitriao?.id !== usuarioId) {
+        const jogador = await this.jogadoresRepository.findOne({
+          where: {
+            partida: { id: partidaId },
+            usuario: { id: usuarioId },
+          },
+        });
+
+        if (!jogador) {
+          try {
+            res.statusCode = 404;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ message: 'Partida nao encontrada' }));
+          } catch (innerErr: unknown) {
+            void innerErr;
+          }
+          return;
+        }
+      }
+    } catch (err: unknown) {
+      void err;
+      try {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ message: 'Partida nao encontrada' }));
+      } catch (innerErr: unknown) {
+        void innerErr;
+      }
+      return;
+    }
+
+    // prepare SSE headers
+    try {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      // send a comment to establish the stream
+      res.write(': connected\n\n');
+    } catch (err: unknown) {
+      void err;
+    }
+
+    // load last messages persisted in DB and send to client
+    try {
+      const persisted: ChatMessage[] = await this.chatMessageRepository.find({
+        where: { partida: { id: partidaId } },
+        relations: { usuario: { perfil: true } },
+        order: { criadoEm: 'ASC' },
+        take: 200,
+      });
+
+      const mapped = persisted.map((m) => {
+        const author =
+          m.authorUsername ??
+          m.usuario?.perfil?.username ??
+          m.usuario?.email?.split('@')[0] ??
+          'Anônimo';
+        return {
+          author,
+          text: m.text,
+          criadoEm: m.criadoEm?.toISOString?.() ?? new Date().toISOString(),
+        };
+      });
+
+      // ensure headers flushed immediately (if available)
+      try {
+        (res as unknown as { flushHeaders?: () => void }).flushHeaders?.();
+      } catch (err: unknown) {
+        void err;
+      }
+
+      for (const msg of mapped) {
+        try {
+          res.write(`data: ${JSON.stringify(msg)}\n\n`);
+        } catch (err: unknown) {
+          void err;
+        }
+      }
+
+      // initialize in-memory history from persisted messages for faster broadcasts
+      this.chatHistory.set(partidaId, mapped.slice(-200));
+    } catch (err: unknown) {
+      void err;
+    }
+
+    const set = this.chatStreams.get(partidaId) ?? new Set<Response>();
+    set.add(res);
+    this.chatStreams.set(partidaId, set);
+
+    const remove = () => {
+      const s = this.chatStreams.get(partidaId);
+      if (!s) return;
+      s.delete(res);
+      if (s.size === 0) this.chatStreams.delete(partidaId);
+    };
+
+    res.on('close', remove);
+    res.on('finish', remove);
+  }
+
+  private broadcastChatMessage(partidaId: string, payload: unknown) {
+    const set = this.chatStreams.get(partidaId);
+    if (!set) return;
+
+    const data = `data: ${JSON.stringify(payload)}\n\n`;
+    // log for debugging
+    try {
+      console.debug(
+        `[chat] broadcast to ${set.size} clients for partida=${partidaId}`,
+      );
+    } catch (err: unknown) {
+      void err;
+    }
+
+    set.forEach((r) => {
+      try {
+        r.write(data);
+      } catch (err: unknown) {
+        void err;
+      }
+    });
+  }
+
+  private closeChatStreams(partidaId: string, payload?: unknown) {
+    const set = this.chatStreams.get(partidaId);
+    if (!set) return;
+
+    const event = `event: partida_deleted\n`;
+    const data = `data: ${JSON.stringify(payload ?? { message: 'Partida encerrada' })}\n\n`;
+
+    set.forEach((res) => {
+      try {
+        res.write(event + data);
+      } catch (err: unknown) {
+        void err;
+      }
+      try {
+        res.end();
+      } catch (err: unknown) {
+        void err;
+      }
+    });
+
+    this.chatStreams.delete(partidaId);
+    this.chatHistory.delete(partidaId);
+  }
+
+  async sendChatMessage(
+    partidaId: string,
+    usuarioId: string | undefined,
+    text: string,
+  ) {
+    const usuario = usuarioId
+      ? await this.usuariosRepository.findOne({
+          where: { id: usuarioId },
+          relations: { perfil: true },
+        })
+      : undefined;
+
+    const author =
+      usuario?.perfil?.username ?? usuario?.email?.split('@')[0] ?? 'Anônimo';
+    const payload = {
+      author,
+      text,
+      partidaId,
+      criadoEm: new Date().toISOString(),
+    };
+
+    // persist to DB (try) and to in-memory cache
+    try {
+      await this.chatMessageRepository.save(
+        this.chatMessageRepository.create({
+          partida: { id: partidaId } as unknown as Partida,
+          usuario: usuario ?? null,
+          authorUsername: author,
+          text,
+        }),
+      );
+    } catch (err: unknown) {
+      void err;
+    }
+
+    const history = this.chatHistory.get(partidaId) ?? [];
+    history.push(payload);
+    if (history.length > 200) history.splice(0, history.length - 200);
+    this.chatHistory.set(partidaId, history);
+
+    this.broadcastChatMessage(partidaId, payload);
+  }
+
+  async abandonar(id: string, usuarioId: string): Promise<PartidaResponse> {
+    const partida = await this.findPartidaOrFail(id);
+
+    const jogador = await this.jogadoresRepository.findOne({
+      where: { partida: { id }, usuario: { id: usuarioId } },
+      relations: { usuario: true },
+    });
+
+    if (!jogador) {
+      throw new NotFoundException('Jogador nao encontrado na partida');
+    }
+
+    if (partida.status === StatusPartida.LOBBY) {
+      // If the host abandons before the game starts, remove the whole partida
+      // and all related records (via DB cascade). Do not count as abandono.
+      if (partida.anfitriao.id === usuarioId) {
+        // build response before deleting so frontend can receive a snapshot
+        const snapshot = await this.buildPartidaResponse(partida, usuarioId);
+
+        // notify connected clients via SSE that this partida foi removida
+        try {
+          this.closeChatStreams(partida.id, { reason: 'host_left' });
+        } catch (err: unknown) {
+          void err;
+        }
+
+        await this.dataSource.transaction(async (manager) => {
+          const partidaRepo = manager.getRepository(Partida);
+          // use delete to ensure DB-level cascades are applied
+          await partidaRepo.delete(id);
+        });
+
+        return snapshot;
+      }
+
+      // non-host leaving: simply remove the jogador to free the slot
+      await this.jogadoresRepository.remove(jogador);
+
+      return this.findOne(id, usuarioId);
+    }
+
+    // If partida already started, convert the player slot to a bot and count an abandonment
+    await this.dataSource.transaction(async (manager) => {
+      const jogadorRepo = manager.getRepository(Jogador);
+      const perfilRepo = manager.getRepository(Perfil);
+      const partidaRepo = manager.getRepository(Partida);
+      const usuarioRepo = manager.getRepository(Usuario);
+
+      jogador.usuario = null;
+      jogador.isBot = true;
+      await jogadorRepo.save(jogador);
+
+      await perfilRepo
+        .createQueryBuilder()
+        .update()
+        .set({ abandonos: () => 'abandonos + 1' })
+        .where('user_id = :usuarioId', { usuarioId })
+        .execute();
+
+      if (partida.anfitriao.id === usuarioId) {
+        const remaining = await jogadorRepo.find({
+          where: { partida: { id } },
+          relations: { usuario: true },
+        });
+        const next = remaining.find(
+          (j) => j.usuario && j.usuario.id !== usuarioId,
+        );
+        if (next && next.usuario) {
+          const usuarioNovo = await usuarioRepo.findOne({
+            where: { id: next.usuario.id },
+          });
+          if (usuarioNovo) {
+            partida.anfitriao = usuarioNovo;
+            await partidaRepo.save(partida);
+          }
+        }
+      }
+    });
 
     return this.findOne(id, usuarioId);
   }
@@ -383,7 +777,6 @@ export class PartidasService {
     await this.dataSource.transaction(async (manager) => {
       const partidaRepository = manager.getRepository(Partida);
       const jogadorRepository = manager.getRepository(Jogador);
-      const usuarioRepository = manager.getRepository(Usuario);
       const perfilRepository = manager.getRepository(Perfil);
 
       if (isCorreta) {
@@ -436,7 +829,9 @@ export class PartidasService {
           .createQueryBuilder()
           .update()
           .set({ vitorias: () => 'vitorias + 1' })
-          .where('user_id = :usuarioId', { usuarioId: humanosAtivos[0].usuario.id })
+          .where('user_id = :usuarioId', {
+            usuarioId: humanosAtivos[0].usuario.id,
+          })
           .execute();
         return;
       }
@@ -498,9 +893,9 @@ export class PartidasService {
     const partida = await this.partidasRepository.findOne({
       where: { id },
       relations: {
-        anfitriao: true,
+        anfitriao: { perfil: true },
         tema: true,
-        vencedor: true,
+        vencedor: { perfil: true },
       },
     });
 
@@ -514,7 +909,7 @@ export class PartidasService {
   private async findJogadores(partidaId: string): Promise<Jogador[]> {
     return this.jogadoresRepository.find({
       where: { partida: { id: partidaId } },
-      relations: { usuario: true },
+      relations: { usuario: { perfil: true } },
       order: { ordemTurno: 'ASC', id: 'ASC' },
     });
   }
@@ -680,6 +1075,8 @@ export class PartidasService {
 
     return {
       id: partida.id,
+      codigo: partida.codigo ?? null,
+      visibilidade: partida.visibilidade,
       status: partida.status,
       maxJogadores: partida.maxJogadores,
       turnoAtual: partida.turnoAtual,
@@ -687,6 +1084,7 @@ export class PartidasService {
       anfitriao: {
         id: partida.anfitriao.id,
         email: partida.anfitriao.email,
+        username: partida.anfitriao.perfil?.username ?? null,
       },
       tema: {
         id: partida.tema.id,
@@ -696,6 +1094,7 @@ export class PartidasService {
         ? {
             id: partida.vencedor.id,
             email: partida.vencedor.email,
+            username: partida.vencedor.perfil?.username ?? null,
           }
         : null,
       jogadores: jogadores.map((jogador) => this.mapJogador(jogador)),
@@ -746,6 +1145,7 @@ export class PartidasService {
       id: jogador.id,
       usuarioId: jogador.usuario?.id ?? null,
       email: jogador.usuario?.email ?? null,
+      username: jogador.usuario?.perfil?.username ?? null,
       isBot: jogador.isBot,
       isEliminado: jogador.isEliminado,
       ordemTurno: jogador.ordemTurno,

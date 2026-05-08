@@ -7,6 +7,7 @@ import { Pergunta } from '../perguntas/entities/pergunta.entity';
 import { Tema } from '../temas/entities/tema.entity';
 import { Usuario } from '../usuarios/entities/usuario.entity';
 import { Partida } from './entities/partida.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { PartidasController } from './partidas.controller';
 import { PartidasService } from './partidas.service';
 
@@ -20,6 +21,7 @@ import { PartidasService } from './partidas.service';
       Carta,
       MaoCarta,
       Pergunta,
+      ChatMessage,
     ]),
   ],
   controllers: [PartidasController],

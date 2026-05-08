@@ -6,13 +6,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SignOptions } from 'jsonwebtoken';
 import { Perfil } from '../perfis/entities/perfil.entity';
 import { Usuario } from '../usuarios/entities/usuario.entity';
+import { Jogador } from '../jogadores/entities/jogador.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Usuario, Perfil]),
+    TypeOrmModule.forFeature([Usuario, Perfil, Jogador]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

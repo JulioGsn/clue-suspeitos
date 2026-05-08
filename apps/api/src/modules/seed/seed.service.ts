@@ -25,10 +25,51 @@ export class SeedService {
 
   async run(): Promise<void> {
     const admin = await this.seedAdmin();
-    const tema = await this.seedTemaPadrao(admin);
-    await this.seedCartasBase(tema);
+
+    const temasPadrao = [
+      'Classico',
+      'Mansão Tudor',
+      'Springfield',
+      'Westeros',
+      'Dunder Mifflin',
+    ];
+
+    await this.seedTemasPadraoLista(admin, temasPadrao);
+
+    const classico = await this.temasRepository.findOne({
+      where: { nome: 'Classico', dono: { id: admin.id } },
+      relations: { dono: true },
+    });
+
+    if (classico) {
+      await this.seedCartasBase(classico);
+    }
 
     this.logger.log('Seed concluido');
+  }
+
+  private async seedTemasPadraoLista(
+    dono: Usuario,
+    nomes: string[],
+  ): Promise<void> {
+    for (const nome of nomes) {
+      const existing = await this.temasRepository.findOne({
+        where: { nome, dono: { id: dono.id } },
+        relations: { dono: true },
+      });
+
+      if (existing) {
+        continue;
+      }
+
+      await this.temasRepository.save(
+        this.temasRepository.create({
+          nome,
+          dono,
+        }),
+      );
+      this.logger.log(`Tema "${nome}" criado`);
+    }
   }
 
   private async seedAdmin(): Promise<Usuario> {
