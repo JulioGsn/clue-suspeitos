@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Body, Delete, Param, HttpCode, Patch } from '@nestjs/common';
 import { TemasService } from './temas.service';
+import { CreateTemaDto } from './dto/create-tema.dto';
+import { UpdateTemaDto } from './dto/update-tema.dto';
 
 @Controller('temas')
 export class TemasController {
@@ -11,13 +13,13 @@ export class TemasController {
   }
 
   @Post()
-  async create(@Body() body: { nome: string; donoId?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
-    return this.temasService.create(body.nome, body.donoId, body.visibilidade);
+  async create(@Body() createTemaDto: CreateTemaDto) {
+    return this.temasService.create(createTemaDto.nome, createTemaDto.donoId, createTemaDto.visibilidade);
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() body: { nome?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
-    return this.temasService.update(id, body as any);
+  async update(@Param('id') id: string, @Body() updateTemaDto: UpdateTemaDto) {
+    return this.temasService.update(id, updateTemaDto as any);
   }
 
   @Delete(':id')

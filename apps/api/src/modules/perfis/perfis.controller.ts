@@ -23,6 +23,8 @@ import * as bcrypt from 'bcrypt';
 // Minimal local type for uploaded file — we only read `filename` here.
 type UploadedFile = { filename?: string } & Record<string, unknown>;
 
+import { UpdatePerfilDto } from './dto/update-perfil.dto';
+
 @UseGuards(JwtAuthGuard)
 @Controller('perfis')
 export class PerfisController {
@@ -42,7 +44,7 @@ export class PerfisController {
   async updatePerfil(
     @CurrentUser() user: AuthenticatedUser,
     @Body()
-    body: { username?: string; currentPassword?: string; newPassword?: string },
+    updatePerfilDto: UpdatePerfilDto,
     @UploadedFile() avatar?: UploadedFile,
   ) {
     const usuario = await this.usuarioRepository.findOne({
@@ -57,8 +59,8 @@ export class PerfisController {
     let changed = false;
 
     // update username (no password required)
-    if (typeof body.username === 'string' && body.username.trim() !== '') {
-      usuario.perfil.username = body.username.trim();
+    if (typeof updatePerfilDto.username === 'string' && updatePerfilDto.username.trim() !== '') {
+      usuario.perfil.username = updatePerfilDto.username.trim();
       changed = true;
     }
 
@@ -72,15 +74,15 @@ export class PerfisController {
     }
 
     // password change: require currentPassword
-    if (body.newPassword && body.newPassword.trim() !== '') {
-      if (!body.currentPassword) {
+    if (updatePerfilDto.newPassword && updatePerfilDto.newPassword.trim() !== '') {
+      if (!updatePerfilDto.currentPassword) {
         throw new BadRequestException(
           'Senha atual requerida para alterar senha',
         );
       }
 
       const matches = await bcrypt.compare(
-        body.currentPassword,
+        updatePerfilDto.currentPassword,
         usuario.passwordHash,
       );
       if (!matches) {

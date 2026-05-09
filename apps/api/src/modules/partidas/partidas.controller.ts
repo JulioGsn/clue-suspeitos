@@ -21,7 +21,10 @@ import type {
 } from './dto/gameplay-response.dto';
 import type { PartidaResponse } from './dto/partida-response.dto';
 import { UpdateBlocoNotasDto } from './dto/update-bloco-notas.dto';
+import { SendChatMessageDto } from './dto/send-chat-message.dto';
+import { EntrarPartidaDto } from './dto/entrar-partida.dto';
 import { PartidasService } from './partidas.service';
+
 
 @UseGuards(JwtAuthGuard)
 @Controller('partidas')
@@ -61,10 +64,10 @@ export class PartidasController {
 
   @Post('entrar')
   entrarPorCodigo(
-    @Body() body: { codigo: string },
+    @Body() entrarPartidaDto: EntrarPartidaDto,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PartidaResponse> {
-    return this.partidasService.entrarPorCodigo(body.codigo, user.usuarioId);
+    return this.partidasService.entrarPorCodigo(entrarPartidaDto.codigo, user.usuarioId);
   }
 
   @Post(':id/add-bot')
@@ -167,10 +170,10 @@ export class PartidasController {
   @Post(':id/chat')
   async sendChatMessage(
     @Param('id') id: string,
-    @Body() body: { text: string },
+    @Body() sendChatMessageDto: SendChatMessageDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.partidasService.sendChatMessage(id, user.usuarioId, body.text);
+    await this.partidasService.sendChatMessage(id, user.usuarioId, sendChatMessageDto.text);
     return { ok: true };
   }
 }
