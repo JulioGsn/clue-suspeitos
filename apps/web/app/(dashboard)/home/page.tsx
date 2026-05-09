@@ -339,6 +339,9 @@ export default function DashboardPage() {
               <p className="text-stone-400 italic text-sm">O rastro ainda está quente. Escolha seu caso.</p>
             </div>
             <div className="mt-4 md:mt-0 flex gap-4">
+              <button onClick={() => router.push('/temas')} className="bg-stone-800 hover:bg-stone-700 text-white px-6 py-3 special-elite text-lg shadow-xl transition-all active:scale-95">
+                NOVO DOSSIÊ
+              </button>
               <button onClick={() => setShowCreateModal(true)} className="bg-red-800 hover:bg-red-700 text-white px-6 py-3 special-elite text-lg shadow-xl transition-all active:scale-95">
                 + NOVO CASO
               </button>
