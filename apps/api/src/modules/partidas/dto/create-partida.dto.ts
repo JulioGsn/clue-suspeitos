@@ -7,7 +7,7 @@ export class CreatePartidaDto {
 
   @IsOptional()
   @IsInt()
-  @Min(2)
+  @Min(3)
   @Max(5)
   maxJogadores?: number;
 

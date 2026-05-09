@@ -200,7 +200,16 @@ export const api = {
 
   // Temas / Cartas (may be unimplemented on backend yet)
   listTemas() {
-    return request<{ id: string; nome: string; cartasCount: number; visibilidade?: string }[]>(`/temas`, "GET");
+    return request<{
+      id: string;
+      nome: string;
+      cartasCount: number;
+      visibilidade?: string;
+      donoId?: string | null;
+      suspeitoCount?: number;
+      armaCount?: number;
+      localCount?: number;
+    }[]>(`/temas`, "GET");
   },
   createTema(body: { nome: string; donoId?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
     return request<{ id: string; nome: string; visibilidade?: string }>(`/temas`, "POST", { body });

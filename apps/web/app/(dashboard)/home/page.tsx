@@ -84,8 +84,9 @@ export default function DashboardPage() {
         }
       }
 
+      let me: any = null;
       try {
-        const me = await api.me();
+        me = await api.me();
         if (!mounted) return;
         setRemoteUser(me);
         if (me?.currentPartidaId) {
@@ -101,14 +102,34 @@ export default function DashboardPage() {
       } catch {
         // ignore
       }
-      // load temas for modal select
+      // load temas for modal select and filter by availability rules
       try {
         const temasList = await api.listTemas();
         if (Array.isArray(temasList) && temasList.length) {
-          setTemas(temasList as any);
-          setTemaId((curr) => curr || (temasList[0]?.id ?? ""));
+          // Apply filtering rules:
+          // 1) Regardless of public/private: at least 12 cards and at least 2 different types present
+          // 2) If PUBLIC and condition 1 holds -> show
+          // 3) If PRIVATE and condition 1 holds -> only show if donoId === current user
+          const filtered = temasList.filter((t: any) => {
+            const total = Number(t.cartasCount || 0);
+            const tipoCounts = [Number(t.suspeitoCount || 0), Number(t.armaCount || 0), Number(t.localCount || 0)];
+            const typesWith = tipoCounts.filter((c) => c > 0).length;
+            const cond1 = total >= 12 && typesWith >= 2;
+            if (!cond1) return false;
+            const vis = (t.visibilidade || 'PUBLIC').toUpperCase();
+            if (vis === 'PUBLIC') return true;
+            // PRIVATE: only show if owner is current user
+            if (vis === 'PRIVATE') {
+              // 'me' was fetched above in this same effect
+              return !!me && (t.donoId === me.id);
+            }
+            return false;
+          });
+
+          setTemas(filtered as any);
+          setTemaId((curr) => curr || (filtered[0]?.id ?? ""));
         }
-      } catch {
+      } catch (e) {
         // ignore - backend may not expose temas endpoint in early stages
       }
     })();
@@ -550,8 +571,8 @@ export default function DashboardPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="maxPlayersInput" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Qtd. Agentes (2-5)</label>
-                    <input id="maxPlayersInput" name="maxPlayers" type="number" min="2" max="5" defaultValue={4} className="w-full input-classic p-3 text-stone-800 font-bold outline-none" />
+                  <label htmlFor="maxPlayersInput" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Qtd. Agentes (3-5)</label>
+                    <input id="maxPlayersInput" name="maxPlayers" type="number" min="3" max="5" defaultValue={4} className="w-full input-classic p-3 text-stone-800 font-bold outline-none" />
                 </div>
                 <div>
                   <label htmlFor="privacy-select" className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Visibilidade</label>

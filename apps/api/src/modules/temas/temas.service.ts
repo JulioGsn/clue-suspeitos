@@ -13,15 +13,46 @@ export class TemasService {
     private readonly usuariosRepository: Repository<Usuario>,
   ) {}
 
-  async findAll(): Promise<{ id: string; nome: string; cartasCount: number; visibilidade: string }[]> {
-    const temas = await this.temasRepository
+  async findAll(): Promise<{
+    id: string;
+    nome: string;
+    cartasCount: number;
+    visibilidade: string;
+    donoId?: string | null;
+    suspeitoCount?: number;
+    armaCount?: number;
+    localCount?: number;
+  }[]> {
+    // Return per-theme totals including counts per card type and owner id so front-end can filter
+    const rows: any[] = await this.temasRepository
       .createQueryBuilder('tema')
+      .leftJoin('tema.dono', 'dono')
       .leftJoin('tema.cartas', 'cartas')
-      .loadRelationCountAndMap('tema.cartasCount', 'tema.cartas')
+      .select('tema.id', 'id')
+      .addSelect('tema.nome', 'nome')
+      .addSelect('tema.visibilidade', 'visibilidade')
+      .addSelect('dono.id', 'donoId')
+      .addSelect('COUNT(cartas.id)', 'cartasCount')
+      .addSelect("SUM(CASE WHEN cartas.tipo = 'SUSPEITO' THEN 1 ELSE 0 END)", 'suspeitoCount')
+      .addSelect("SUM(CASE WHEN cartas.tipo = 'ARMA' THEN 1 ELSE 0 END)", 'armaCount')
+      .addSelect("SUM(CASE WHEN cartas.tipo = 'LOCAL' THEN 1 ELSE 0 END)", 'localCount')
+      .groupBy('tema.id')
+      .addGroupBy('dono.id')
+      .addGroupBy('tema.nome')
+      .addGroupBy('tema.visibilidade')
       .orderBy('tema.nome', 'ASC')
-      .getMany();
+      .getRawMany();
 
-    return temas.map((t: any) => ({ id: t.id, nome: t.nome, cartasCount: t.cartasCount || 0, visibilidade: t.visibilidade || 'PUBLIC' }));
+    return rows.map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      visibilidade: r.visibilidade || 'PUBLIC',
+      cartasCount: Number(r.cartasCount || 0),
+      donoId: r.donoId || null,
+      suspeitoCount: Number(r.suspeitoCount || 0),
+      armaCount: Number(r.armaCount || 0),
+      localCount: Number(r.localCount || 0),
+    } as any));
   }
 
   async create(nome: string, donoId?: string, visibilidade?: 'PUBLIC' | 'PRIVATE'): Promise<{ id: string; nome: string; visibilidade: string }> {
