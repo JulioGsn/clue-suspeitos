@@ -91,7 +91,32 @@ textarea.input-field {
 .input-classic option,
 .input-field option {
   color: #1b1a16 !important;
-  background: transparent !important;
+  background: #ffffff !important;
+}
+
+/* Ensure selects inside paper-sheet are legible (light background + dark text) */
+.paper-sheet select.input-classic,
+.paper-sheet select.input-field {
+  background: #ffffff !important;
+  color: #1b1a16 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+.paper-sheet select.input-classic option,
+.paper-sheet select.input-field option {
+  background: #ffffff !important;
+  color: #1b1a16 !important;
+}
+
+/* Ensure the active-theme visibility select is readable on dark workspace */
+#active-theme-visibility,
+#active-theme-visibility option {
+  background: #ffffff !important;
+  color: #1b1a16 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  border: none !important;
+  padding: 0.25rem 0.5rem !important;
 }
 
 .confidential-card {

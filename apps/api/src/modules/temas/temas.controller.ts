@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Delete, Param, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Body, Delete, Param, HttpCode, Patch } from '@nestjs/common';
 import { TemasService } from './temas.service';
 
 @Controller('temas')
@@ -11,8 +11,13 @@ export class TemasController {
   }
 
   @Post()
-  async create(@Body() body: { nome: string; donoId?: string }) {
-    return this.temasService.create(body.nome, body.donoId);
+  async create(@Body() body: { nome: string; donoId?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
+    return this.temasService.create(body.nome, body.donoId, body.visibilidade);
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() body: { nome?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
+    return this.temasService.update(id, body as any);
   }
 
   @Delete(':id')

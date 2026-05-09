@@ -19,6 +19,13 @@ export class Tema {
   @Column({ length: 100 })
   nome!: string;
 
+  @Column({
+    type: 'enum',
+    enum: ['PUBLIC', 'PRIVATE'],
+    default: 'PUBLIC',
+  })
+  visibilidade!: 'PUBLIC' | 'PRIVATE';
+
   @ManyToOne(() => Usuario, {
     nullable: false,
     onDelete: 'CASCADE',

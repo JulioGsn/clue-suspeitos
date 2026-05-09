@@ -32,13 +32,14 @@ export default function TemasPage() {
       {
         id: 1,
         name: "Mansão Tudor (Clássico)",
+        visibilidade: 'PUBLIC',
         cards: [
           { id: 101, name: "Coronel Mustard", type: "Suspeito", image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=300&q=80" },
           { id: 102, name: "Castiçal", type: "Arma", image: "https://images.unsplash.com/photo-1616086782200-db81d6f7ed85?w=300&q=80" },
           { id: 103, name: "Biblioteca", type: "Local", image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=300&q=80" }
         ]
       },
-      { id: 2, name: "Incidente no Escritório", cards: [] }
+      { id: 2, name: "Incidente no Escritório", visibilidade: 'PUBLIC', cards: [] }
     ];
 
     let activeThemeId = null;
@@ -113,6 +114,24 @@ export default function TemasPage() {
       if (!theme) return;
       const titleEl = document.getElementById('active-theme-title');
       if (titleEl) titleEl.innerText = theme.name;
+      const activeVisEl = document.getElementById('active-theme-visibility') as HTMLSelectElement | null;
+      if (activeVisEl) {
+        activeVisEl.value = (theme.visibilidade || 'PUBLIC');
+        activeVisEl.onchange = async () => {
+          const prev = theme.visibilidade || 'PUBLIC';
+          const newVis = activeVisEl.value as 'PUBLIC' | 'PRIVATE';
+          try {
+            const updated = await api.updateTema(String(id), { visibilidade: newVis });
+            theme.visibilidade = updated.visibilidade || newVis;
+            renderThemes();
+            try { if ((window as any).showAppAlert) (window as any).showAppAlert('Visibilidade atualizada.'); else alert('Visibilidade atualizada.'); } catch (e) { try { alert('Visibilidade atualizada.'); } catch(e){} }
+          } catch (err) {
+            try { console.error('updateTema failed', err); } catch {}
+            try { if ((window as any).showAppAlert) (window as any).showAppAlert('Falha ao atualizar visibilidade.'); else alert('Falha ao atualizar visibilidade.'); } catch(e) { try { alert('Falha ao atualizar visibilidade.'); } catch(e){} }
+            activeVisEl.value = prev;
+          }
+        };
+      }
       const emptyState = document.getElementById('empty-state');
       if (emptyState) emptyState.classList.add('hidden');
       const ws = document.getElementById('theme-workspace');
@@ -473,13 +492,16 @@ export default function TemasPage() {
         const nameInput = document.getElementById('new-theme-name');
         if (!nameInput) return;
         const nome = (nameInput as HTMLInputElement).value;
+        const visibilitySelect = document.getElementById('new-theme-visibility') as HTMLSelectElement | null;
+        const vis = visibilitySelect ? (visibilitySelect.value as 'PUBLIC' | 'PRIVATE') : 'PUBLIC';
         const submitBtn = (formTheme as HTMLFormElement).querySelector('button[type="submit"]') as HTMLButtonElement | null;
         try {
           if (submitBtn) submitBtn.disabled = true;
           const dono = getUser();
-          const created = await api.createTema({ nome, donoId: dono?.id });
-          themes.push({ id: created.id, name: created.nome, cards: [] });
+          const created = await api.createTema({ nome, donoId: dono?.id, visibilidade: vis });
+          themes.push({ id: created.id, name: created.nome, cards: [], visibilidade: created.visibilidade || vis });
           (nameInput as HTMLInputElement).value = '';
+          if (visibilitySelect) visibilitySelect.value = 'PUBLIC';
           renderThemes();
           selectTheme(created.id);
         } catch (err) {
@@ -540,7 +562,7 @@ export default function TemasPage() {
       try {
         const temasList = await api.listTemas();
         if (Array.isArray(temasList)) {
-          themes = temasList.map((t) => ({ id: t.id, name: t.nome, cards: new Array(t.cartasCount || 0) }));
+          themes = temasList.map((t) => ({ id: t.id, name: t.nome, visibilidade: t.visibilidade || 'PUBLIC', cards: new Array(t.cartasCount || 0) }));
         }
       } catch (err) {
         try { console.error('listTemas failed', err); } catch {}
@@ -596,6 +618,13 @@ export default function TemasPage() {
                   <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Nome de Código</label>
                   <input type="text" id="new-theme-name" required placeholder="Ex: O Assassinato no Expresso" className="w-full input-classic font-bold text-sm" />
                 </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1">Visibilidade</label>
+                  <select id="new-theme-visibility" defaultValue="PUBLIC" className="w-full input-classic font-bold text-sm">
+                    <option value="PUBLIC">Público</option>
+                    <option value="PRIVATE">Sigiloso</option>
+                  </select>
+                </div>
                 <button type="submit" className="bg-stone-800 text-white py-2 px-4 uppercase text-[10px] font-bold shadow-md hover:bg-red-800 transition-colors">Criar Pasta de Arquivo</button>
               </form>
             </div>
@@ -619,6 +648,13 @@ export default function TemasPage() {
                 <div className="flex-1 min-w-0">
                   <h1 id="active-theme-title" className="special-elite text-3xl sm:text-4xl text-stone-200 uppercase tracking-tighter drop-shadow-lg truncate">Nome do Tema</h1>
                   <p className="text-stone-400 text-xs uppercase tracking-widest mt-1">Anexe as provas visuais ao arquivo</p>
+                  <div className="mt-2">
+                    <label className="text-[10px] font-bold text-stone-500 uppercase tracking-widest mr-2">Visibilidade</label>
+                    <select id="active-theme-visibility" className="input-classic text-sm font-bold">
+                      <option value="PUBLIC">Público</option>
+                      <option value="PRIVATE">Sigiloso</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div id="theme-status-badge" className="flex items-center gap-2 bg-red-900/90 text-white px-3 py-1.5 shadow-lg border border-red-500 shrink-0">

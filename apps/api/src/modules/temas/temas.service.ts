@@ -13,7 +13,7 @@ export class TemasService {
     private readonly usuariosRepository: Repository<Usuario>,
   ) {}
 
-  async findAll(): Promise<{ id: string; nome: string; cartasCount: number }[]> {
+  async findAll(): Promise<{ id: string; nome: string; cartasCount: number; visibilidade: string }[]> {
     const temas = await this.temasRepository
       .createQueryBuilder('tema')
       .leftJoin('tema.cartas', 'cartas')
@@ -21,10 +21,10 @@ export class TemasService {
       .orderBy('tema.nome', 'ASC')
       .getMany();
 
-    return temas.map((t: any) => ({ id: t.id, nome: t.nome, cartasCount: t.cartasCount || 0 }));
+    return temas.map((t: any) => ({ id: t.id, nome: t.nome, cartasCount: t.cartasCount || 0, visibilidade: t.visibilidade || 'PUBLIC' }));
   }
 
-  async create(nome: string, donoId?: string): Promise<{ id: string; nome: string }> {
+  async create(nome: string, donoId?: string, visibilidade?: 'PUBLIC' | 'PRIVATE'): Promise<{ id: string; nome: string; visibilidade: string }> {
     if (!nome || !nome.trim()) {
       throw new BadRequestException('Nome do tema é obrigatório');
     }
@@ -44,9 +44,20 @@ export class TemasService {
       throw new BadRequestException('Nenhum usuário disponível para ser dono do tema');
     }
 
-    const tema = this.temasRepository.create({ nome: nome.trim(), dono });
+    const tema = this.temasRepository.create({ nome: nome.trim(), dono, visibilidade: visibilidade || 'PUBLIC' });
     await this.temasRepository.save(tema);
-    return { id: tema.id, nome: tema.nome };
+    return { id: tema.id, nome: tema.nome, visibilidade: tema.visibilidade };
+  }
+
+  async update(id: string, payload: { nome?: string; visibilidade?: 'PUBLIC' | 'PRIVATE' }) {
+    const tema = await this.temasRepository.findOne({ where: { id } });
+    if (!tema) throw new NotFoundException('Tema nao encontrado');
+
+    if (payload.nome !== undefined && payload.nome !== null) tema.nome = String(payload.nome).trim();
+    if (payload.visibilidade !== undefined && payload.visibilidade !== null) tema.visibilidade = payload.visibilidade;
+
+    await this.temasRepository.save(tema);
+    return { id: tema.id, nome: tema.nome, visibilidade: tema.visibilidade };
   }
 
   async remove(id: string) {
