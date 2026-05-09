@@ -200,7 +200,10 @@ export const api = {
 
   // Temas / Cartas (may be unimplemented on backend yet)
   listTemas() {
-    return request<{ id: string; nome: string }[]>(`/temas`, "GET");
+    return request<{ id: string; nome: string; cartasCount: number }[]>(`/temas`, "GET");
+  },
+  createTema(body: { nome: string; donoId?: string }) {
+    return request<{ id: string; nome: string }>(`/temas`, "POST", { body });
   },
   getTema(id: string) {
     return request<any>(`/temas/${id}`, "GET");
@@ -212,6 +215,15 @@ export const api = {
   getCarta(id: string) {
     return request<CartaResumo>(`/cartas/${id}`, 'GET');
   },
+  createCarta(body: { nome: string; tipo: string; imageUrl: string; temaId: string }) {
+    return request<{ id: string; nome: string; tipo: string; imageUrl: string; tema: { id: string; nome: string } }>(`/cartas`, 'POST', { body });
+  },
+  deleteCarta(id: string) {
+    return request<void>(`/cartas/${id}`, 'DELETE');
+  },
+    updateCarta(id: string, body: { nome?: string; tipo?: string; imageUrl?: string }) {
+      return request<{ id: string; nome: string; tipo: string; imageUrl: string; tema: { id: string; nome: string } }>(`/cartas/${id}`, 'PATCH', { body });
+    },
   me() {
     return request<AuthUser | null>(`/auth/me`, 'GET');
   },
@@ -239,6 +251,9 @@ export const api = {
   abandonarPartida(token?: string, id?: string) {
     return request<PartidaResponse>(`/partidas/${id}/abandon`, 'POST', { token });
   },
+    deleteTema(id: string) {
+      return request<void>(`/temas/${id}`, 'DELETE');
+    },
 };
 
 export function saveSession(auth: AuthResponse): void {

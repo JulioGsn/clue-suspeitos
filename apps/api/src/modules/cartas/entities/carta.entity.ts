@@ -29,7 +29,7 @@ export class Carta {
   })
   tipo!: TipoCarta;
 
-  @Column({ name: 'image_url', length: 255 })
+  @Column({ name: 'image_url', type: 'longtext' })
   imageUrl!: string;
 
   @ManyToOne(() => Tema, (tema) => tema.cartas, {

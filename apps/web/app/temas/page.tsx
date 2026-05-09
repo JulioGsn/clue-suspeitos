@@ -4,11 +4,29 @@
 import React, { useEffect } from "react";
 import Head from "next/head";
 import { useRouter } from "next/navigation";
+import { api, getUser } from "@/services/api";
+import installShowAlert from '@/utils/showAlert';
+import installShowConfirm from '@/utils/showConfirm';
+import Cropper from 'cropperjs';
 
 export default function TemasPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // install custom alert/confirm hosts (provide window.showAppAlert / window.showAppConfirm)
+    try { installShowAlert(); } catch (e) {}
+    try { installShowConfirm(); } catch (e) {}
+
+    const showAlert = (msg) => {
+      try {
+        if ((window as any).showAppAlert) {
+          (window as any).showAppAlert(String(msg));
+          return;
+        }
+      } catch (e) {}
+      try { alert(msg); } catch (e) {}
+    };
+
     // --- DADOS E ESTADO ---
     let themes = [
       {
@@ -38,12 +56,31 @@ export default function TemasPage() {
     let cropX = 0, cropY = 0, cropScale = 1;
     let isDragging = false, startDragX, startDragY, initialCropX, initialCropY;
     let originalImageFile = null;
+    let editingCardId: string | null = null;
+    let cropperInstance: any = null;
 
     // --- ORDENAÇÃO DE CARTAS ---
+    function normalizeTipo(tipo) {
+      if (!tipo && tipo !== 0) return 'Desconhecido';
+      const key = String(tipo).trim().toUpperCase();
+      if (key === 'SUSPEITO' || key === 'SUS' || key === 'SUSPECT' || key === 'SUSPECTO') return 'Suspeito';
+      if (key === 'ARMA' || key === 'WEAPON') return 'Arma';
+      if (key === 'LOCAL' || key === 'LOCATION' || key === 'LUGAR') return 'Local';
+      // If it's already a readable form (e.g., 'Suspeito'), normalize capitalization
+      const lowered = String(tipo).toLowerCase();
+      if (lowered === 'suspeito' || lowered === 'sus') return 'Suspeito';
+      if (lowered === 'arma' || lowered === 'weapon') return 'Arma';
+      if (lowered === 'local' || lowered === 'lugar' || lowered === 'location') return 'Local';
+      // fallback: capitalize first letter
+      return String(tipo).charAt(0).toUpperCase() + String(tipo).slice(1).toLowerCase();
+    }
+
     const sortCards = (cards) => {
       const typeOrder = { 'Suspeito': 1, 'Arma': 2, 'Local': 3 };
       return [...cards].sort((a, b) => {
-        if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
+        const ta = a.type || '';
+        const tb = b.type || '';
+        if (typeOrder[ta] !== typeOrder[tb]) return (typeOrder[ta] || 999) - (typeOrder[tb] || 999);
         return a.name.localeCompare(b.name);
       });
     };
@@ -69,7 +106,7 @@ export default function TemasPage() {
       });
     }
 
-    function selectTheme(id) {
+    async function selectTheme(id) {
       activeThemeId = id;
       renderThemes();
       const theme = themes.find(t => t.id === id);
@@ -80,6 +117,15 @@ export default function TemasPage() {
       if (emptyState) emptyState.classList.add('hidden');
       const ws = document.getElementById('theme-workspace');
       if (ws) { ws.classList.remove('hidden'); ws.classList.add('flex'); }
+
+      try {
+        const cartas = await api.listCartas(String(id));
+        theme.cards = (cartas || []).map(c => ({ id: c.id, name: c.nome, type: normalizeTipo(c.tipo), image: c.imageUrl }));
+      } catch (err) {
+        try { console.error('listCartas failed', err); } catch {}
+        theme.cards = theme.cards || [];
+      }
+
       renderCards();
     }
 
@@ -128,10 +174,12 @@ export default function TemasPage() {
       }
 
       sortedCards.forEach(card => {
-        let typeColor = '';
-        if(card.type === 'Suspeito') typeColor = 'bg-yellow-600';
-        if(card.type === 'Arma') typeColor = 'bg-stone-600';
-        if(card.type === 'Local') typeColor = 'bg-green-800';
+        let typeBarClass = '';
+        let typeTextClass = '';
+        if (card.type === 'Suspeito') { typeBarClass = 'bg-blue-600'; typeTextClass = 'text-blue-600'; }
+        else if (card.type === 'Arma') { typeBarClass = 'bg-green-600'; typeTextClass = 'text-green-600'; }
+        else if (card.type === 'Local') { typeBarClass = 'bg-purple-600'; typeTextClass = 'text-purple-600'; }
+        else { typeBarClass = 'bg-stone-600'; typeTextClass = 'text-stone-500'; }
 
         const cardEl = document.createElement('div');
         cardEl.className = 'evidence-card flex flex-col w-full';
@@ -141,11 +189,16 @@ export default function TemasPage() {
             <img src="${card.image}" class="w-full h-full object-cover" alt="${card.name}">
           </div>
           <div class="flex flex-col mt-auto px-1">
-            <div class="w-full h-1 ${typeColor} mb-1"></div>
-            <span class="font-bold text-[10px] sm:text-[11px] leading-tight text-center line-clamp-2 uppercase">${card.name}</span>
-            <span class="text-[8px] text-stone-500 uppercase font-bold text-center border-t border-stone-200 mt-1 pt-1 tracking-widest">${card.type}</span>
+            <div class="w-full h-1 ${typeBarClass} mb-1"></div>
+            <span class="font-bold card-name text-[10px] sm:text-[11px] leading-tight text-center line-clamp-2 uppercase">${card.name}</span>
+            <span class="text-[8px] ${typeTextClass} uppercase font-bold text-center border-t border-stone-200 mt-1 pt-1 tracking-widest">${card.type}</span>
           </div>
-          <button type="button" onclick="deleteCard(${card.id})" class="absolute -top-2 -right-2 bg-red-800 text-white w-6 h-6 rounded-full text-xs opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-bold shadow-md z-20" title="Destruir Prova">X</button>
+          <button type="button" onclick="editCard('${card.id}')" style="color:#fff!important" class="absolute bottom-3 left-3 bg-blue-800 text-white w-7 h-7 rounded-full text-xs opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-bold shadow-md z-20" title="Editar Prova">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828zM5 12v3h3l9.586-9.586a4 4 0 00-5.657-5.657L2.343 9.343A4 4 0 005 12z"/></svg>
+          </button>
+          <button type="button" onclick="deleteCard('${card.id}')" style="color:#fff!important" class="absolute bottom-3 right-3 bg-red-800 text-white w-7 h-7 rounded-full text-xs opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-bold shadow-md z-20" title="Destruir Prova">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H3a1 1 0 000 2h14a1 1 0 000-2h-2V3a1 1 0 00-1-1H6zm2 6a1 1 0 00-1 1v7a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v7a1 1 0 102 0V9a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+          </button>
         `;
         grid.appendChild(cardEl);
       });
@@ -154,20 +207,27 @@ export default function TemasPage() {
     // --- DRAG & DROP ---
     function setupDragAndDrop() {
       if(!dropZone) return;
+      // avoid attaching handlers multiple times (HMR / re-run)
+      try {
+        if ((dropZone as any).dataset?.dragInit) return;
+        (dropZone as any).dataset = (dropZone as any).dataset || {};
+        (dropZone as any).dataset.dragInit = '1';
+      } catch (e) {}
+
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eName => dropZone.addEventListener(eName, e => { e.preventDefault(); e.stopPropagation(); }, false));
       ['dragenter', 'dragover'].forEach(eName => dropZone.addEventListener(eName, () => dropZone.classList.add('dragover'), false));
       ['dragleave', 'drop'].forEach(eName => dropZone.addEventListener(eName, () => dropZone.classList.remove('dragover'), false));
 
-      dropZone.addEventListener('drop', e => {
-        const file = e.dataTransfer.files[0];
-        if(file && file.type.startsWith('image/')) loadFileIntoEditor(file);
-        else alert("Inválido. Apenas fotografias (imagens).");
-      }, false);
-      
+      dropZone.ondrop = (e: any) => {
+        const file = e.dataTransfer?.files?.[0];
+        if(file && file.type && file.type.startsWith('image/')) loadFileIntoEditor(file);
+        else showAlert("Inválido. Apenas fotografias (imagens).");
+      };
+
       if (fileInput) {
-        fileInput.addEventListener('change', function() {
+        (fileInput as HTMLInputElement).onchange = function(this: HTMLInputElement) {
           if(this.files && this.files[0]) loadFileIntoEditor(this.files[0]);
-        });
+        };
       }
     }
 
@@ -183,6 +243,8 @@ export default function TemasPage() {
           if (dropZone) dropZone.classList.add('hidden');
           if (imageEditor) imageEditor.classList.remove('hidden');
           if (btnDiscard) btnDiscard.classList.remove('hidden');
+          // ensure CropperJS is loaded and initialize
+          initCropper();
         };
         img.src = e.target.result;
       }
@@ -191,27 +253,85 @@ export default function TemasPage() {
 
     // --- EDITOR DE IMAGEM (PAN & ZOOM) ---
     function setupCropInteractions() {
-      if (zoomSlider) zoomSlider.addEventListener('input', () => { cropScale = parseFloat(zoomSlider.value); updateCropView(); });
+      // initialize Cropper loader and bind zoom slider; idempotent for HMR
+      if ((window as any).__cropperInteractionsInit) return;
+      (window as any).__cropperInteractionsInit = true;
 
-      if (cropContainer) {
-        cropContainer.addEventListener('mousedown', e => { isDragging = true; startDragX = e.clientX; startDragY = e.clientY; initialCropX = cropX; initialCropY = cropY; });
-      }
-      document.addEventListener('mousemove', e => { if(!isDragging) return; cropX = initialCropX + (e.clientX - startDragX); cropY = initialCropY + (e.clientY - startDragY); updateCropView(); });
-      document.addEventListener('mouseup', () => isDragging = false);
+      // bind zoom slider to cropper when available, fallback to previous transform
+      if (zoomSlider) (zoomSlider as HTMLInputElement).oninput = () => {
+        const val = parseFloat((zoomSlider as HTMLInputElement).value || '1');
+        if (cropperInstance && typeof cropperInstance.zoomTo === 'function') {
+          try { cropperInstance.zoomTo(val); } catch (e) { try { cropperInstance.zoom(val); } catch (e) {} }
+        } else {
+          cropScale = val; updateCropView();
+        }
+      };
 
-      if (cropContainer) {
-        cropContainer.addEventListener('touchstart', e => { if(e.touches.length > 1) return; isDragging = true; startDragX = e.touches[0].clientX; startDragY = e.touches[0].clientY; initialCropX = cropX; initialCropY = cropY; }, {passive: true});
+      // nothing here: Cropper is imported as a dependency and initialized when needed
+    }
+
+    
+
+    function initCropper() {
+      try {
+        if (!Cropper) return;
+        const imgEl = document.getElementById('crop-image') as HTMLImageElement | null;
+        if (!imgEl) return;
+        // ensure image element has src loaded
+        if (!imgEl.src) return;
+        // destroy existing if any
+        if (cropperInstance) {
+          try { cropperInstance.replace(imgEl.src); return; } catch (e) { try { cropperInstance.destroy(); } catch (e) {} cropperInstance = null; }
+        }
+        // create new instance
+        cropperInstance = new Cropper(imgEl, {
+          viewMode: 1,
+          aspectRatio: 3/4,
+          autoCropArea: 1,
+          movable: true,
+          zoomable: true,
+          background: false,
+          dragMode: 'move',
+          cropBoxMovable: false,
+          cropBoxResizable: false,
+        });
+        // ensure zoom slider controls the cropper (override previous handler)
+        try {
+          if (zoomSlider) {
+            (zoomSlider as HTMLInputElement).value = '1';
+            (zoomSlider as HTMLInputElement).oninput = (ev: any) => {
+              const val = parseFloat((ev.target as HTMLInputElement).value || '1');
+              try { cropperInstance.zoomTo(val); } catch (e) { try { cropperInstance.zoom(val); } catch (e) {} }
+            };
+          }
+        } catch (e) { /* ignore */ }
+      } catch (e) {
+        try { console.warn('initCropper failed', e); } catch (e) {}
       }
-      document.addEventListener('touchmove', e => { if(!isDragging) return; cropX = initialCropX + (e.touches[0].clientX - startDragX); cropY = initialCropY + (e.touches[0].clientY - startDragY); updateCropView(); }, {passive: true});
-      document.addEventListener('touchend', () => isDragging = false);
+    }
+
+    function destroyCropper() {
+      try {
+        if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+      } catch (e) { /* ignore */ }
     }
 
     function updateCropView() {
       if (!cropImage) return;
+      // if cropper is active, let it control the view
+      if (cropperInstance) return;
       cropImage.style.transform = `translate(calc(-50% + ${cropX}px), calc(-50% + ${cropY}px)) scale(${cropScale})`;
     }
 
     function generateCroppedBase64() {
+      try {
+        if (cropperInstance && typeof cropperInstance.getCroppedCanvas === 'function') {
+          const canvas = cropperInstance.getCroppedCanvas({ width: 300, height: 400, fillColor: '#fff' });
+          if (canvas) return canvas.toDataURL('image/jpeg', 0.9);
+        }
+      } catch (e) {
+        try { console.warn('cropper getCroppedCanvas failed', e); } catch (e) {}
+      }
       if(!originalImageFile) return null;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -236,53 +356,198 @@ export default function TemasPage() {
       if (dropZone) dropZone.classList.remove('hidden');
       if (imageEditor) imageEditor.classList.add('hidden');
       if (btnDiscard) btnDiscard.classList.add('hidden');
+      // cancel editing mode when resetting image
+      editingCardId = null;
+      // destroy cropper instance to avoid stale state
+      destroyCropper();
+      const submitBtn = (document.getElementById('form-card') as HTMLFormElement | null)?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+      if (submitBtn) submitBtn.textContent = 'CARIMBAR';
     }
 
     // Expose functions used by inline handlers (deleteCard via innerHTML/onclick)
-    function deleteCard(cardId) {
-      if (!confirm("Deseja destruir esta prova e removê-la do dossiê?")) return;
+    async function deleteCard(cardId) {
+      const question = 'Deseja destruir esta prova e removê-la do dossiê?';
+      let ok = false;
+      try {
+        if ((window as any).showAppConfirm) {
+          ok = await (window as any).showAppConfirm(question);
+        } else {
+          ok = confirm(question);
+        }
+      } catch (e) {
+        try { ok = confirm(question); } catch (e) { ok = false; }
+      }
+      if (!ok) return;
       const theme = themes.find(t => t.id === activeThemeId);
       if (!theme) return;
-      theme.cards = theme.cards.filter(c => c.id !== cardId);
+      try {
+        if ((window as any).api && (window as any).api.deleteCarta) {
+          // prefer global api if exposed
+          await (window as any).api.deleteCarta(cardId);
+        } else {
+          await api.deleteCarta(String(cardId));
+        }
+      } catch (err) {
+        try { console.error('deleteCarta failed', err); } catch {}
+        showAlert('Falha ao remover a prova no servidor.');
+        return;
+      }
+      theme.cards = theme.cards.filter(c => String(c.id) !== String(cardId));
       renderThemes(); renderCards();
     }
 
+    function editCard(cardId) {
+      const theme = themes.find(t => t.id === activeThemeId);
+      if (!theme) return;
+      const card = theme.cards.find(c => String(c.id) === String(cardId));
+      if (!card) return;
+      editingCardId = String(cardId);
+      const nameInput = document.getElementById('card-name') as HTMLInputElement | null;
+      const typeSelect = document.getElementById('card-type') as HTMLSelectElement | null;
+      if (nameInput) nameInput.value = card.name || '';
+      if (typeSelect) typeSelect.value = card.type || '';
+
+      // set submit button text to indicate edit
+      const submitBtn = (document.getElementById('form-card') as HTMLFormElement | null)?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+      if (submitBtn) submitBtn.textContent = 'SALVAR';
+
+      // load current image into editor for re-cropping
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          if (cropImage) cropImage.src = img.src;
+          originalImageFile = img;
+          cropX = 0; cropY = 0; cropScale = 1; if (zoomSlider) (zoomSlider as HTMLInputElement).value = '1';
+          updateCropView();
+          if (dropZone) dropZone.classList.add('hidden');
+          if (imageEditor) imageEditor.classList.remove('hidden');
+          if (btnDiscard) btnDiscard.classList.remove('hidden');
+          initCropper();
+        };
+        img.src = card.image || '';
+      } catch (e) {
+        // ignore load failures
+      }
+    }
+
     (window as any).deleteCard = deleteCard;
+    (window as any).editCard = editCard;
     (window as any).resetImage = resetImage;
+
+    async function deleteTheme() {
+      if (!activeThemeId) return;
+      const question = 'Deseja excluir este dossiê e todas as provas associadas?';
+      let ok = false;
+      try {
+        if ((window as any).showAppConfirm) ok = await (window as any).showAppConfirm(question);
+        else ok = confirm(question);
+      } catch (e) {
+        try { ok = confirm(question); } catch (e) { ok = false; }
+      }
+      if (!ok) return;
+      try {
+        if ((window as any).api && (window as any).api.deleteTema) await (window as any).api.deleteTema(activeThemeId);
+        else await api.deleteTema(String(activeThemeId));
+      } catch (err) {
+        try { console.error('deleteTema failed', err); } catch {}
+        showAlert('Falha ao excluir o dossiê no servidor.');
+        return;
+      }
+      themes = themes.filter(t => t.id !== activeThemeId);
+      activeThemeId = null;
+      renderThemes(); renderCards();
+      const emptyState = document.getElementById('empty-state');
+      if (emptyState) emptyState.classList.remove('hidden');
+      const ws = document.getElementById('theme-workspace');
+      if (ws) { ws.classList.add('hidden'); ws.classList.remove('flex'); }
+    }
+    const btnDeleteTemaEl = document.getElementById('btn-delete-theme');
+    if (btnDeleteTemaEl) btnDeleteTemaEl.onclick = deleteTheme;
 
     // --- SUBMIT E REMOÇÃO ---
     const formTheme = document.getElementById('form-theme');
     if (formTheme) {
-      formTheme.addEventListener('submit', (e) => {
+      (formTheme as HTMLFormElement).onsubmit = async (e) => {
         e.preventDefault();
         const nameInput = document.getElementById('new-theme-name');
         if (!nameInput) return;
-        const newTheme = { id: Date.now(), name: (nameInput as HTMLInputElement).value, cards: [] };
-        themes.push(newTheme);
-        (nameInput as HTMLInputElement).value = '';
-        renderThemes();
-        selectTheme(newTheme.id);
-      });
+        const nome = (nameInput as HTMLInputElement).value;
+        const submitBtn = (formTheme as HTMLFormElement).querySelector('button[type="submit"]') as HTMLButtonElement | null;
+        try {
+          if (submitBtn) submitBtn.disabled = true;
+          const dono = getUser();
+          const created = await api.createTema({ nome, donoId: dono?.id });
+          themes.push({ id: created.id, name: created.nome, cards: [] });
+          (nameInput as HTMLInputElement).value = '';
+          renderThemes();
+          selectTheme(created.id);
+        } catch (err) {
+          try { console.error('createTema failed', err); } catch {}
+          showAlert('Falha ao criar o dossiê.');
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      };
     }
 
     const formCard = document.getElementById('form-card');
     if (formCard) {
-      formCard.addEventListener('submit', (e) => {
+      (formCard as HTMLFormElement).onsubmit = async (e) => {
         e.preventDefault();
-        if(!originalImageFile) { alert("Obrigatório enquadrar fotografia da evidência."); return; }
+        if (!editingCardId && !originalImageFile) { showAlert("Obrigatório enquadrar fotografia da evidência."); return; }
+        const submitBtn = (formCard as HTMLFormElement).querySelector('button[type="submit"]') as HTMLButtonElement | null;
         const finalImageBase64 = generateCroppedBase64();
         const theme = themes.find(t => t.id === activeThemeId);
-        if (!theme) return;
+        if (!theme) { showAlert('Selecione um dossiê antes de adicionar provas.'); return; }
         const cardNameEl = document.getElementById('card-name');
         const cardTypeEl = document.getElementById('card-type');
-        theme.cards.push({ id: Date.now(), name: (cardNameEl as HTMLInputElement).value, type: (cardTypeEl as HTMLSelectElement).value, image: finalImageBase64 });
-        (formCard as HTMLFormElement).reset();
-        resetImage(); renderThemes(); renderCards();
-      });
+        const nome = (cardNameEl as HTMLInputElement).value;
+        const tipo = (cardTypeEl as HTMLSelectElement).value;
+        try {
+          if (submitBtn) submitBtn.disabled = true;
+          const imagePayload = finalImageBase64 || (originalImageFile && originalImageFile.src) || '';
+          if (editingCardId) {
+            // update existing card
+            const updateBody: any = { nome, tipo };
+            if (finalImageBase64 || (originalImageFile && originalImageFile.src)) updateBody.imageUrl = imagePayload;
+            const updated = await api.updateCarta(editingCardId, updateBody);
+            // replace in local theme
+            const idx = theme.cards.findIndex(c => String(c.id) === String(editingCardId));
+            if (idx >= 0) {
+              theme.cards[idx] = { id: updated.id, name: updated.nome, type: normalizeTipo(updated.tipo), image: updated.imageUrl };
+            }
+            editingCardId = null;
+          } else {
+            const created = await api.createCarta({ nome, tipo, imageUrl: imagePayload || '', temaId: String(activeThemeId) });
+            // append to local theme (normalize type)
+            const createdType = created?.tipo !== undefined ? created.tipo : tipo;
+            theme.cards.push({ id: created.id, name: created.nome, type: normalizeTipo(createdType), image: created.imageUrl });
+          }
+          (formCard as HTMLFormElement).reset();
+          resetImage(); renderThemes(); renderCards();
+        } catch (err) {
+          try { console.error('createCarta failed', err); } catch {}
+          showAlert('Falha ao guardar a prova.');
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      };
     }
 
-    // Inicia
-    renderThemes(); setupDragAndDrop(); setupCropInteractions();
+    // Inicia: load temas from API then setup interactions
+    (async () => {
+      try {
+        const temasList = await api.listTemas();
+        if (Array.isArray(temasList)) {
+          themes = temasList.map((t) => ({ id: t.id, name: t.nome, cards: new Array(t.cartasCount || 0) }));
+        }
+      } catch (err) {
+        try { console.error('listTemas failed', err); } catch {}
+      }
+      renderThemes();
+      setupDragAndDrop(); setupCropInteractions();
+    })();
 
   }, []);
 
@@ -304,6 +569,9 @@ export default function TemasPage() {
           .theme-item:hover:not(.active) { background-color: rgba(0,0,0,0.02); border-left-color: #666; }
           .evidence-card { background: #fff; padding: 10px 10px 25px 10px; box-shadow: 2px 4px 10px rgba(0,0,0,0.4); position: relative; transition: transform 0.2s; }
           .evidence-card:hover { transform: scale(1.05) rotate(2deg); z-index: 10; }
+          /* Card text legibility */
+          .evidence-card .card-name { color: #111827 !important; }
+          .evidence-card .text-stone-500 { color: #6b7280 !important; }
           .masking-tape { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-3deg); width: 60px; height: 25px; background-color: rgba(230, 225, 200, 0.8); box-shadow: 0 1px 3px rgba(0,0,0,0.2); z-index: 5; }
           .drop-zone { border: 3px dashed #8b7355; background-color: rgba(139, 115, 85, 0.1); transition: all 0.3s; }
           .drop-zone.dragover { border-color: #8b0000; background-color: rgba(139, 0, 0, 0.1); transform: scale(1.02); }
@@ -352,12 +620,15 @@ export default function TemasPage() {
                   <h1 id="active-theme-title" className="special-elite text-3xl sm:text-4xl text-stone-200 uppercase tracking-tighter drop-shadow-lg truncate">Nome do Tema</h1>
                   <p className="text-stone-400 text-xs uppercase tracking-widest mt-1">Anexe as provas visuais ao arquivo</p>
                 </div>
-                <div id="theme-status-badge" className="flex items-center gap-2 bg-red-900/90 text-white px-3 py-1.5 shadow-lg border border-red-500 shrink-0">
-                  <span className="text-xl">⚠️</span>
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold uppercase leading-none">Status: Incompleto</span>
-                    <span id="theme-status-text" className="text-[8px] uppercase text-red-200">Mínimo de 12 cartas exigido</span>
+                <div className="flex items-center gap-2">
+                  <div id="theme-status-badge" className="flex items-center gap-2 bg-red-900/90 text-white px-3 py-1.5 shadow-lg border border-red-500 shrink-0">
+                    <span className="text-xl">⚠️</span>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold uppercase leading-none">Status: Incompleto</span>
+                      <span id="theme-status-text" className="text-[8px] uppercase text-red-200">Mínimo de 12 cartas exigido</span>
+                    </div>
                   </div>
+                  <button id="btn-delete-theme" title="Excluir Dossiê" className="bg-red-800 text-white px-3 py-1 rounded text-xs hover:bg-red-900 transition-colors">Excluir Dossiê</button>
                 </div>
               </div>
 

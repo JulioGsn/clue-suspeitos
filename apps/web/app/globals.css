@@ -1,5 +1,7 @@
 /* Fonts are loaded in app/layout.tsx to apply globally */
 
+@import 'cropperjs/dist/cropper.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
