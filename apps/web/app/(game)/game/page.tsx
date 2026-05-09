@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/services/api';
@@ -15,6 +15,18 @@ export default function Page() {
   const [showRevealOverlay, setShowRevealOverlay] = useState(false);
   const [selectedReveal, setSelectedReveal] = useState<string | null>(null);
   const [revealedInfo, setRevealedInfo] = useState<any>(null);
+  const [hasAskedQuestion, setHasAskedQuestion] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [cardZoom, setCardZoom] = useState<{ nome: string; tipoLabel: string; imageUrl: string | null } | null>(null);
+  const [questionResultOverlay, setQuestionResultOverlay] = useState<{
+    carta1: string; carta2: string; cartaRevelada: { id: string; nome: string; tipo: string; imageUrl: string } | null; foiRespondida: boolean;
+  } | null>(null);
+  const [gameEndOverlay, setGameEndOverlay] = useState<{
+    isCorreta: boolean; isEliminado: boolean;
+    cartasCrime: { suspeito: any; arma: any; local: any } | null;
+    vencedorName?: string; // definido para os perdedores quando outro jogador venceu
+  } | null>(null);
+  const [dossieChecked, setDossieChecked] = useState<Set<string>>(new Set());
 
   const SUSPECTS = ['Srta. Scarlett', 'Coronel Mustard', 'Rev. Green', 'Sra. Peacock', 'Prof. Plum', 'Sra. White'];
   const WEAPONS = ['Castiçal', 'Faca', 'Revólver', 'Corda', 'Cano', 'Chave Inglesa'];
@@ -46,54 +58,225 @@ export default function Page() {
     try { sessionStorage.setItem('partida_players', JSON.stringify(players)); } catch {}
   }
 
-  // Load players for this partida from session (or create a sensible fallback)
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem('partida_players');
-      if (raw) {
-        let parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Normalize: keep only entries with a username, remove duplicates by username
-          const seen = new Set();
-          parsed = parsed
-            .filter((p: any) => p && (p.username || p.name))
-            .map((p: any) => ({ ...p, username: p.username || p.name }))
-            .filter((p: any) => {
-              const key = (p.username || '').toString().trim();
-              if (!key) return false;
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
+  function getDossiePid(): string | null {
+    return meUserRef.current?.currentPartidaId ?? partidaStateRef.current?.id ?? null;
+  }
 
-          if (parsed.length > 0) {
-            // Shuffle order for display
-            const shuffled = shuffle(parsed);
-            // attach card counts if missing
-            const hands = dealHandsToPlayers(shuffled);
-            const assembled = shuffled.map((p: any, i: number) => ({ ...p, username: p.username, cards: hands[i] ? hands[i].length : 0 }));
-            setPlayersState(assembled);
-            savePlayersToSession(assembled);
-            setTurnIndex(0);
-            return;
+  function toggleDossieCheck(name: string) {
+    setDossieChecked(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      try {
+        const pid = getDossiePid();
+        if (pid) localStorage.setItem(`dossie_${pid}`, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  }
+
+  // Estado do usuário autenticado (se houver) e carregamento da partida real
+  const [meUser, setMeUser] = useState<any | null>(null);
+  const [partidaState, setPartidaState] = useState<any | null>(null);
+  const meUserRef = React.useRef<any | null>(null);
+  const [cardsByCategory, setCardsByCategory] = useState<Record<string, any[]>>({ Suspeito: [], Arma: [], Local: [] });
+
+  // Fluxo de pergunta: Player A espera, Player B responde
+  const [waitingForAnswer, setWaitingForAnswer] = useState<{
+    perguntaId: string; carta1Nome: string; carta2Nome: string; targetName: string;
+  } | null>(null);
+  const [pendingAnswerRequest, setPendingAnswerRequest] = useState<{
+    perguntaId: string; carta1Nome: string; carta2Nome: string; askerName: string;
+    cardOptions: string[]; // nomes das cartas que Player B tem na mão
+    cardObjects: { nome: string; imageUrl?: string | null; tipo?: string | null; hasIt: boolean }[];
+  } | null>(null);
+  const [gamePhaseBanner, setGamePhaseBanner] = useState<string>('');
+  // Armazena resultado enquanto aguarda ACK do Player B
+  const pendingAnswerRef = useRef<{
+    perguntaId: string; cartaRevelada: any; foiRespondida: boolean; carta1Nome: string; carta2Nome: string; targetName: string;
+  } | null>(null);
+  const turnIndexRef = useRef(0);
+  const playersStateRef = useRef<any[]>([]);
+  const partidaStateRef = useRef<any>(null);
+  const cardsByCategoryRef = useRef<Record<string, any[]>>({ Suspeito: [], Arma: [], Local: [] });
+
+  useEffect(() => { meUserRef.current = meUser; }, [meUser]);
+  // Restaurar dossier ao carregar a partida (pelo meUser ou pelo partidaState)
+  useEffect(() => {
+    const pid = meUser?.currentPartidaId ?? partidaState?.id ?? null;
+    if (!pid) return;
+    try {
+      const raw = localStorage.getItem(`dossie_${pid}`);
+      if (raw) setDossieChecked(new Set(JSON.parse(raw)));
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meUser?.currentPartidaId, partidaState?.id]);
+  // Salvar dossier automaticamente sempre que mudar
+  useEffect(() => {
+    const pid = getDossiePid();
+    if (!pid) return;
+    try { localStorage.setItem(`dossie_${pid}`, JSON.stringify([...dossieChecked])); } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dossieChecked]);
+  useEffect(() => { turnIndexRef.current = turnIndex; }, [turnIndex]);
+  useEffect(() => { playersStateRef.current = playersState; }, [playersState]);
+  useEffect(() => { partidaStateRef.current = partidaState; }, [partidaState]);
+  useEffect(() => { cardsByCategoryRef.current = cardsByCategory; }, [cardsByCategory]);
+
+  function mapPartidaToPlayers(partida: any, me: any | null) {
+    if (!partida || !Array.isArray(partida.jogadores)) return [];
+    return partida.jogadores.map((j: any) => ({
+      id: j.id,
+      usuarioId: j.usuarioId ?? null,
+      username: j.username ?? (j.email ? j.email.split('@')[0] : undefined) ?? `Jogador`,
+      isBot: j.isBot,
+      isEliminado: j.isEliminado,
+      ordemTurno: j.ordemTurno,
+      cards: j.usuarioId && me && me.id === j.usuarioId && partida.minhaMao ? partida.minhaMao.length : 0,
+      isLocal: me && me.id === j.usuarioId,
+    }));
+  }
+
+  // Reset per-turn state when turn changes
+  useEffect(() => {
+    setHasAskedQuestion(false);
+    setPendingQuestion(null);
+    setQuestionResultOverlay(null);
+  }, [turnIndex]);
+
+  // Auto-skip eliminated player's turn
+  useEffect(() => {
+    const me = meUserRef.current;
+    if (!me || !partidaState) return;
+    const myJogador = (partidaState.jogadores ?? []).find((j: any) => j.usuarioId === me.id);
+    if (!myJogador || !myJogador.isEliminado) return;
+    const myIdx = playersState.findIndex(p => p.isLocal);
+    if (myIdx >= 0 && myIdx === turnIndex) {
+      const timer = setTimeout(() => passTurn(), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [turnIndex, partidaState]);
+
+  // Load players for this partida from API (prefer) or from session as fallback
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const me = await api.me();
+        if (!mounted) return;
+        setMeUser(me);
+
+        const partidaId = me?.currentPartidaId ?? undefined;
+        if (partidaId) {
+          try {
+                const partida = await api.getPartida(undefined, partidaId);
+                if (!mounted) return;
+                setPartidaState(partida);
+                const players = mapPartidaToPlayers(partida, me);
+                setPlayersState(players);
+                savePlayersToSession(players);
+                const idx = players.findIndex(p => p.ordemTurno === partida.turnoAtual);
+                setTurnIndex(idx >= 0 ? idx : 0);
+
+                // fetch theme cards and group by category
+                try {
+                  const cartas = await api.listCartas(partida.tema.id);
+                  const grouped: Record<string, any[]> = { Suspeito: [], Arma: [], Local: [] };
+                  for (const c of cartas) {
+                    if (c.tipo === 'SUSPEITO') grouped.Suspeito.push(c);
+                    if (c.tipo === 'ARMA') grouped.Arma.push(c);
+                    if (c.tipo === 'LOCAL') grouped.Local.push(c);
+                  }
+                  setCardsByCategory(grouped);
+                } catch (err) {
+                  // ignore card fetch errors
+                }
+
+                return;
+          } catch (err) {
+            // fallthrough to session fallback
+            console.debug('Falha ao obter partida via API, usando sessão/fallback', err);
           }
         }
+      } catch (err) {
+        // ignore
       }
-    } catch (e) {}
 
-    // fallback: create a small simulated partida and distribute cards
-    const fallback = [ { username: 'AGENTE JÚLIO' }, { username: 'INSPETOR_GOMES' } ];
-    const hands = dealHandsToPlayers(fallback);
-    const assembled = fallback.map((p, i) => ({ ...p, username: p.username, cards: hands[i] ? hands[i].length : 0 }));
-    const shuffled = shuffle(assembled);
-    setPlayersState(shuffled);
-    savePlayersToSession(shuffled);
-    setTurnIndex(0);
+      // sessionStorage fallback
+      try {
+        const raw = sessionStorage.getItem('partida_players');
+        if (raw) {
+          let parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const seen = new Set();
+            parsed = parsed
+              .filter((p: any) => p && (p.username || p.name))
+              .map((p: any) => ({ ...p, username: p.username || p.name }))
+              .filter((p: any) => {
+                const key = (p.username || '').toString().trim();
+                if (!key) return false;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+
+            if (parsed.length > 0) {
+              const shuffled = shuffle(parsed);
+              const hands = dealHandsToPlayers(shuffled);
+              const assembled = shuffled.map((p: any, i: number) => ({ ...p, username: p.username, cards: hands[i] ? hands[i].length : 0 }));
+              if (!mounted) return;
+              setPlayersState(assembled);
+              savePlayersToSession(assembled);
+              setTurnIndex(0);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // fallback: create a small simulated partida and distribute cards
+      const fallback = [{ username: 'AGENTE JÚLIO' }, { username: 'INSPETOR_GOMES' }];
+      const hands = dealHandsToPlayers(fallback);
+      const assembled = fallback.map((p, i) => ({ ...p, username: p.username, cards: hands[i] ? hands[i].length : 0 }));
+      const shuffled = shuffle(assembled);
+      if (!mounted) return;
+      setPlayersState(shuffled);
+      savePlayersToSession(shuffled);
+      setTurnIndex(0);
+    })();
+
+    return () => { mounted = false; };
+  }, []);
+
+  // Polling de fallback: sincroniza estado a cada 4s para casos onde SSE falha
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const me = meUserRef.current;
+        if (!me?.currentPartidaId) return;
+        const partida = await api.getPartida(undefined, me.currentPartidaId);
+        setPartidaState(partida);
+        const players = mapPartidaToPlayers(partida, me);
+        setPlayersState(players);
+        savePlayersToSession(players);
+        const idx = players.findIndex((p: any) => p.ordemTurno === partida.turnoAtual);
+        setTurnIndex(idx >= 0 ? idx : 0);
+      } catch { /* ignora erros de rede */ }
+    }, 4000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const router = useRouter();
   const [showAbandonModal, setShowAbandonModal] = useState(false);
   const [abandoning, setAbandoning] = useState(false);
+  const [accusationConfirm, setAccusationConfirm] = useState<{
+    suspeito: any; arma: any; local: any;
+    suspId: string; armaId: string; localId: string;
+    partidaId: string;
+  } | null>(null);
 
   function openAbandonModal() {
     setShowAbandonModal(true);
@@ -155,8 +338,8 @@ export default function Page() {
       :root { --clue-dark: #1a1a1a; --clue-yellow: #e6d5b8; --clue-red: #8b0000; --paper-bg: #fdf6e3; --accent-red: #8b0000; }
       html, body, #__next, .min-h-screen, .h-screen, main { background-image: radial-gradient(circle,#2a2a2a 1px,transparent 1px) !important; background-size:30px 30px !important; background-color: var(--clue-dark) !important; color: #e6e6e6 !important; }
       .paper-sheet { background-color: var(--paper-bg) !important; background-image: url('https://www.transparenttextures.com/patterns/paper.png') !important; color: #111827 !important; }
-      .clue-card { background: white !important; border-color: #333 !important; min-width: 120px; width:120px; height:180px !important; display:flex; flex-direction:column; justify-content:space-between; padding:8px; }
-      .hand-card { min-width: 120px; width: 120px; height:180px; }
+      .clue-card { background: white !important; border-color: #333 !important; min-width: 120px; width:120px; display:flex; flex-direction:column; justify-content:space-between; padding:8px; }
+      .hand-card { min-width: 120px; width: 120px; }
       .clue-card .font-bold { color: #111827 !important; }
       .clue-card:hover .font-bold, .clue-card.selected .font-bold { color: var(--accent-red) !important; }
       .elimination-checkbox { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border: 2px solid var(--accent-red) !important; background: transparent !important; }
@@ -175,23 +358,23 @@ export default function Page() {
       .crime-tape { background: repeating-linear-gradient(45deg, #facc15, #facc15 20px, #000 20px, #000 40px) !important; }
       [class*="bg-[radial-gradient"], [class*="bg-[linear-gradient"] { background-image: none !important; }
       footer, .h-40 { background-color: #0b0b0c !important; }
+      /* Card images: always cover their container */
+      .evidence-card img, .hand-card img, .mini-card-image img { width:100% !important; height:100% !important; object-fit: cover !important; display:block !important; }
     `;
     document.head.appendChild(style);
     return () => { const s = document.getElementById('game-theme-overrides'); if (s) s.remove(); };
   }, []);
 
-  function zoomCard(name: string, type: string) {
-    const nameEl = document.getElementById('zoom-name');
-    const typeEl = document.getElementById('zoom-type');
-    if (nameEl) nameEl.innerText = name;
-    if (typeEl) typeEl.innerText = type;
-    const overlay = document.getElementById('card-zoom-overlay');
-    if (overlay) { overlay.classList.remove('hidden'); overlay.classList.add('flex'); }
+  // NOTE: dossier is now rendered entirely via JSX (see dossie-list in return).
+  // The imperative DOM approach was removed because React reconciliation would wipe
+  // the raw DOM elements on every re-render (e.g. turn change), erasing checked state.
+
+  function zoomCard(nome: string, tipoLabel: string, imageUrl?: string | null) {
+    setCardZoom({ nome, tipoLabel, imageUrl: imageUrl ?? null });
   }
 
   function closeZoom() {
-    const overlay = document.getElementById('card-zoom-overlay');
-    if (overlay) { overlay.classList.add('hidden'); overlay.classList.remove('flex'); }
+    setCardZoom(null);
   }
 
   function switchTab(tab: string) {
@@ -264,6 +447,7 @@ export default function Page() {
       grid.className = 'grid grid-cols-3 gap-3';
 
       const options = Array.from(section.querySelectorAll('.elimination-checkbox')).map(cb => ({
+        id: cb.getAttribute('data-id'),
         name: cb.getAttribute('data-name'),
         marked: (cb as HTMLInputElement).checked,
         category
@@ -273,9 +457,10 @@ export default function Page() {
 
       options.forEach(opt => {
         const btn = document.createElement('div');
-        const isSelected = selectedItemsRef.current.some(i => i.name === opt.name);
+        const isSelected = selectedItemsRef.current.some(i => (i.id && opt.id && i.id === opt.id) || (i.name && opt.name && i.name === opt.name));
         btn.className = `selectable-item ${opt.marked ? 'marked' : ''} ${isSelected ? 'selected' : ''}`;
         btn.setAttribute('data-category', opt.category || '');
+        if (opt.id) btn.setAttribute('data-id', opt.id);
         btn.innerText = opt.name || '';
         btn.onclick = () => toggleSelectItem(opt);
         grid.appendChild(btn);
@@ -287,14 +472,14 @@ export default function Page() {
   }
 
   function toggleSelectItem(item: any) {
-    const idx = selectedItemsRef.current.findIndex(i => i.name === item.name);
+    const idx = selectedItemsRef.current.findIndex(i => (i.id && item.id && i.id === item.id) || i.name === item.name);
     if (idx > -1) {
       selectedItemsRef.current.splice(idx, 1);
     } else {
       const sameCatIdx = selectedItemsRef.current.findIndex(i => i.category === item.category);
       if (sameCatIdx > -1) selectedItemsRef.current.splice(sameCatIdx, 1);
       const max = currentModalModeRef.current === 'pergunta' ? 2 : 3;
-      if (selectedItemsRef.current.length < max) selectedItemsRef.current.push(item);
+      if (selectedItemsRef.current.length < max) selectedItemsRef.current.push({ id: item.id ?? null, name: item.name ?? null, category: item.category });
     }
     renderModalContent();
     validateSelection();
@@ -328,7 +513,37 @@ export default function Page() {
     setEvents(e => [...e, { text: `${current?.username ?? 'Agente'} passou a vez.` }]);
     setPendingQuestion(null);
     setRevealedInfo(null);
-    setTurnIndex(t => nextIndex(t));
+    setHasAskedQuestion(false);
+    setQuestionResultOverlay(null);
+
+    // If we have a real partida, call API to advance the turno; otherwise fallback to local rotation
+    (async () => {
+            try {
+            if (meUserRef.current && meUserRef.current.currentPartidaId) {
+              const pid = meUserRef.current.currentPartidaId;
+              // call server endpoint to pass the turn
+              try {
+                const updated = await api.passarVez(undefined, pid);
+                if (updated) {
+                  const players = mapPartidaToPlayers(updated, meUserRef.current);
+                  setPlayersState(players);
+                  savePlayersToSession(players);
+                  const idx = players.findIndex((p: any) => p.ordemTurno === updated.turnoAtual);
+                  setTurnIndex(idx >= 0 ? idx : 0);
+                  // Notifica todos os jogadores (inclusive eliminados) que o turno mudou
+                  try { await api.sendChatMessage(undefined, pid, `__VEZ__:${meUserRef.current?.username ?? ''}`); } catch {}
+                  return;
+                }
+              } catch (err) {
+                // fallback to local rotation if API fails
+              }
+            }
+      } catch (err) {
+        // ignore
+      }
+
+      setTurnIndex(t => nextIndex(t));
+    })();
   }
 
   function handleSendInfo() {
@@ -347,33 +562,145 @@ export default function Page() {
     setShowRevealOverlay(false);
   }
 
-  function confirmAction() {
-    const names = selectedItemsRef.current.map(i => i.name).join(' e ');
+  function addDossierEntry(asker: string, target: string, carta1: string, carta2: string, cartaRevelada: { nome: string } | null) {
+    const container = document.getElementById('content-log');
+    if (!container) return;
+    const entry = document.createElement('div');
+    entry.className = 'border-l-2 border-stone-400 pl-2 mb-3';
+    entry.innerHTML = `
+      <p class="text-stone-500 font-bold uppercase text-[8px] mb-1">${asker} &gt; ${target}</p>
+      <div class="flex flex-col gap-1">
+        <span class="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">${carta1}</span>
+        <span class="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">${carta2}</span>
+      </div>
+      <p class="${cartaRevelada ? 'text-green-800' : 'text-red-800'} font-bold uppercase mt-1">${cartaRevelada ? 'Carta revelada.' : 'Nenhuma carta revelada.'}</p>
+    `;
+    container.insertBefore(entry, container.firstChild);
+  }
+
+  async function confirmAction() {
+    const me = meUserRef.current;
+    const partidaId = me?.currentPartidaId;
+
     if (currentModalModeRef.current === 'pergunta') {
-      // Build card list and set a pending question to the next player in turn order
-      const cards = selectedItemsRef.current.map(i => i.name).filter(Boolean);
-      const asker = turnIndex;
-      const target = nextIndex(turnIndex);
-      setEvents(e => [...e, { text: `${playersState[asker]?.username ?? 'Agente'} fez pergunta para ${playersState[target]?.username ?? 'Agente'}: ${cards.join(', ')}` }]);
-      setPendingQuestion({ askerIndex: asker, targetIndex: target, cards });
-      setShowRevealOverlay(true);
-      addChatMsg("SISTEMA", `Interrogando sobre: ${names}.`, "text-stone-600 italic font-bold");
-      closeModal();
-      return;
-    } else {
-      const confirmText = `ACUSAÇÃO IRREVOGÁVEL:\n\nVocê afirma que o crime foi cometido por:\n${selectedItemsRef.current.map(i => i.name).join('\n')}\n\nSe errar, você será ELIMINADO imediatamente. Prosseguir?`;
-      if (confirm(confirmText)) {
-        if (Math.random() > 0.4) {
-          document.body.classList.add('is-eliminated');
-          setEvents(e => [...e, { text: `Acusação incorreta! ${playersState[turnIndex]?.username ?? 'Agente'} foi eliminado.` }]);
-          addChatMsg("SISTEMA", "ERRO FATAL NA ACUSAÇÃO! Agente fora de combate.", "text-red-800 font-bold uppercase border-y border-red-800 my-1 py-1");
-        } else {
-          alert("CASO RESOLVIDO! Você é o mestre dos investigadores!");
-          setEvents(e => [...e, { text: `Acusação correta! Caso encerrado por ${playersState[turnIndex]?.username ?? 'Agente'}.` }]);
-          location.reload();
-        }
-        closeModal();
+      if (selectedItemsRef.current.length !== 2) return;
+      const [item1, item2] = selectedItemsRef.current;
+
+      // Try to resolve IDs from cardsByCategory if not present (static fallback)
+      function resolveId(item: any) {
+        if (item.id) return item.id;
+        const cat = item.category as string;
+        const catKey = cat === 'Suspeito' ? 'Suspeito' : cat === 'Arma' ? 'Arma' : 'Local';
+        const found = ((cardsByCategory as any)[catKey] ?? []).find((c: any) => c.nome === item.name);
+        return found?.id ?? null;
       }
+
+      const id1 = resolveId(item1);
+      const id2 = resolveId(item2);
+
+      if (!id1 || !id2 || !partidaId) {
+        addChatMsg('SISTEMA', 'Cartas sem ID — verifique se o tema foi carregado.', 'text-red-800 font-bold');
+        closeModal();
+        return;
+      }
+
+      closeModal();
+      setActionLoading(true);
+      try {
+        const result = await api.criarPergunta(undefined, partidaId, { carta1Id: id1, carta2Id: id2 });
+
+        const askerName = playersStateRef.current[turnIndexRef.current]?.username ?? 'Agente';
+        const targetName = playersStateRef.current[nextIndex(turnIndexRef.current)]?.username ?? 'Próximo Agente';
+
+        // Guarda resultado – NÃO exibe ainda, aguarda ACK do Player B
+        pendingAnswerRef.current = {
+          perguntaId: result.perguntaId,
+          cartaRevelada: result.cartaRevelada,
+          foiRespondida: result.foiRespondida,
+          carta1Nome: item1.name ?? '',
+          carta2Nome: item2.name ?? '',
+          targetName,
+        };
+
+        setPendingQuestion({ askerIndex: turnIndexRef.current, targetIndex: nextIndex(turnIndexRef.current), cards: [item1.name, item2.name] });
+        setHasAskedQuestion(true);
+        setWaitingForAnswer({ perguntaId: result.perguntaId, carta1Nome: item1.name ?? '', carta2Nome: item2.name ?? '', targetName });
+
+        // Sinal para Player B via chat (filtrado no display) — inclui username do alvo para detecção confiável
+        try {
+          await api.sendChatMessage(undefined, partidaId, `__PERGUNTA__:${result.perguntaId}:${item1.name}:${item2.name}:${targetName}`);
+        } catch {}
+
+        if (result.partida) {
+          setPartidaState(result.partida);
+          const players = mapPartidaToPlayers(result.partida, me);
+          setPlayersState(players);
+        }
+
+      } catch (err) {
+        addChatMsg('SISTEMA', err instanceof ApiError ? (err as ApiError).message : 'Erro ao fazer pergunta.', 'text-red-800 font-bold');
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+
+    // Acusação
+    const suspeito = selectedItemsRef.current.find(i => i.category === 'Suspeito');
+    const arma     = selectedItemsRef.current.find(i => i.category === 'Arma');
+    const local    = selectedItemsRef.current.find(i => i.category === 'Local');
+    if (!suspeito || !arma || !local) return;
+
+    function resolveAccId(item: any, catKey: string) {
+      if (item.id) return item.id;
+      const found = ((cardsByCategory as any)[catKey] ?? []).find((c: any) => c.nome === item.name);
+      return found?.id ?? null;
+    }
+
+    const suspId  = resolveAccId(suspeito, 'Suspeito');
+    const armaId  = resolveAccId(arma, 'Arma');
+    const localId = resolveAccId(local, 'Local');
+
+    if (!suspId || !armaId || !localId || !partidaId) {
+      addChatMsg('SISTEMA', 'Cartas sem ID — verifique se o tema foi carregado.', 'text-red-800 font-bold');
+      return;
+    }
+
+    closeModal();
+    setAccusationConfirm({ suspeito, arma, local, suspId, armaId, localId, partidaId });
+  }
+
+  async function executeAccusation() {
+    if (!accusationConfirm) return;
+    const { suspeito, arma, local, suspId, armaId, localId, partidaId } = accusationConfirm;
+    const me = meUserRef.current;
+    setAccusationConfirm(null);
+    setActionLoading(true);
+    try {
+      const result = await api.criarAcusacao(undefined, partidaId, { suspeitoId: suspId, armaId: armaId, localId: localId });
+
+      setGameEndOverlay({ isCorreta: result.isCorreta, isEliminado: result.isEliminado, cartasCrime: result.cartasCrime });
+
+      if (result.partida) {
+        setPartidaState(result.partida);
+        const players = mapPartidaToPlayers(result.partida, me);
+        setPlayersState(players);
+        const idx = players.findIndex(p => p.ordemTurno === result.partida.turnoAtual);
+        setTurnIndex(idx >= 0 ? idx : 0);
+      }
+
+      if (result.isEliminado) {
+        addChatMsg('SISTEMA', `ACUSAÇÃO INCORRETA! ${me?.username ?? 'Agente'} foi eliminado.`, 'text-red-800 font-bold uppercase border-y border-red-800 my-1 py-1');
+        setPendingQuestion(null);
+        setHasAskedQuestion(false);
+        // O backend já envia __ACUSACAO__: via SSE para todos os clientes.
+        // Não precisa chamar passarVez nem sendChatMessage aqui.
+      }
+
+    } catch (err) {
+      addChatMsg('SISTEMA', err instanceof ApiError ? (err as ApiError).message : 'Erro ao fazer acusação.', 'text-red-800 font-bold');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -448,15 +775,144 @@ export default function Page() {
           }
 
           if (es) {
-            es.onmessage = (ev) => {
+            es.onmessage = async (ev) => {
               try {
                 const payload = JSON.parse(ev.data);
-                addChatMsg(payload.author ?? '??', payload.text ?? '');
+                const text: string = payload.text ?? '';
+
+                // --- Sinal de pergunta: destinado ao Player B ---
+                if (text.startsWith('__PERGUNTA__:')) {
+                  const parts = text.split(':');
+                  const perguntaId = parts[1] ?? '';
+                  const carta1Nome = parts[2] ?? '';
+                  const carta2Nome = parts[3] ?? '';
+                  const targetUsername = parts[4] ?? '';
+                  const askerName = payload.author ?? '?';
+                  // Comparação por username — muito mais confiável que cálculo de índice
+                  const myUsername = meUserRef.current?.username ?? '';
+                  if (myUsername && myUsername === targetUsername) {
+                    // Eu sou Player B: verificar quais cartas tenho
+                    const minhaMao: any[] = partidaStateRef.current?.minhaMao ?? [];
+                    const cardOptions = [carta1Nome, carta2Nome].filter(cn =>
+                      minhaMao.some((c: any) => (c.nome ?? c.name ?? '') === cn)
+                    );
+                    // Se não tenho nenhuma das cartas, auto-passar sem mostrar overlay
+                    if (cardOptions.length === 0) {
+                      try {
+                        const pid = meUserRef.current?.currentPartidaId;
+                        if (pid) await api.sendChatMessage(undefined, pid, `__ACK__:${perguntaId}:`);
+                      } catch {}
+                      setGamePhaseBanner(`${askerName} perguntou — você não tem nenhuma dessas cartas.`);
+                      return;
+                    }
+                    // Montar objetos completos das cartas (com imagem)
+                    const allCardsFlat = Object.values(cardsByCategoryRef.current).flat() as any[];
+                    const cardObjects = [carta1Nome, carta2Nome].map(cn => {
+                      const fromMao = minhaMao.find((c: any) => (c.nome ?? c.name ?? '') === cn);
+                      const fromAll = allCardsFlat.find((c: any) => (c.nome ?? c.name ?? '') === cn);
+                      const card = fromMao ?? fromAll;
+                      return {
+                        nome: cn,
+                        imageUrl: card?.imageUrl ?? card?.image ?? null,
+                        tipo: card?.tipo ?? null,
+                        hasIt: cardOptions.includes(cn),
+                      };
+                    });
+                    // Auto-selecionar se só tem 1 carta
+                    setSelectedReveal(cardOptions.length === 1 ? cardOptions[0] : null);
+                    setPendingAnswerRequest({ perguntaId, carta1Nome, carta2Nome, askerName, cardOptions, cardObjects });
+                    setGamePhaseBanner(`${askerName} perguntou para você: ${carta1Nome} ou ${carta2Nome}`);
+                  } else {
+                    // Sou outro jogador: atualizar banner informativo
+                    setGamePhaseBanner(`${askerName} perguntou para ${targetUsername || 'próximo agente'}: ${carta1Nome} ou ${carta2Nome}`);
+                  }
+                  return;
+                }
+
+                // --- Sinal de ACK: Player B respondeu, exibir resultado para Player A ---
+                if (text.startsWith('__ACK__:')) {
+                  const parts = text.split(':');
+                  const ackId = parts[1] ?? '';
+                  const chosenCardName = parts[2] ?? '';
+                  if (pendingAnswerRef.current && pendingAnswerRef.current.perguntaId === ackId) {
+                    const { foiRespondida, carta1Nome, carta2Nome, targetName } = pendingAnswerRef.current;
+                    // Usar carta escolhida por Player B; fallback para resultado do backend
+                    let cartaRevelada: any = pendingAnswerRef.current.cartaRevelada;
+                    if (chosenCardName) {
+                      const allCardsFlat = Object.values(cardsByCategoryRef.current).flat() as any[];
+                      const found = allCardsFlat.find((c: any) => (c.nome ?? c.name ?? '') === chosenCardName);
+                      cartaRevelada = found
+                        ? { id: found.id ?? '', nome: found.nome ?? found.name ?? chosenCardName, tipo: found.tipo ?? '', imageUrl: found.imageUrl ?? null }
+                        : { id: '', nome: chosenCardName, tipo: '', imageUrl: null };
+                    }
+                    setQuestionResultOverlay({ carta1: carta1Nome, carta2: carta2Nome, cartaRevelada: cartaRevelada ?? null, foiRespondida });
+                    setWaitingForAnswer(null);
+                    addDossierEntry(
+                      playersStateRef.current[turnIndexRef.current]?.username ?? 'Agente',
+                      targetName,
+                      carta1Nome, carta2Nome,
+                      cartaRevelada
+                    );
+                    pendingAnswerRef.current = null;
+                  }
+                  const responderName = payload.author ?? '?';
+                  setGamePhaseBanner(`${responderName} respondeu.`);
+                  return;
+                }
+
+                // --- Sinal de acusação (servidor → todos os clientes) ---
+                if (text.startsWith('__ACUSACAO__:')) {
+                  const parts = text.split(':');
+                  const acusadorName = parts[1] ?? '?';
+                  const resultado = parts[2] ?? '';
+                  if (resultado === 'CORRETA') {
+                    addChatMsg('SISTEMA', `${acusadorName} solucionou o caso! Jogo encerrado.`, 'text-green-800 font-bold');
+                  } else {
+                    addChatMsg('SISTEMA', `${acusadorName} fez uma acusação errada e foi eliminado.`, 'text-red-700 font-bold');
+                  }
+                  // Sem return: cai no getPartida abaixo para atualizar o estado
+                }
+
+                // --- Sinal de turno forçado após eliminação (legado) ---
+                if (text.startsWith('__TURNO__:')) {
+                  const eliminadoName = text.split(':')[1] ?? '?';
+                  addChatMsg('SISTEMA', `${eliminadoName} fez uma acusação errada e foi eliminado.`, 'text-red-700 font-bold italic');
+                  // Não retorna: deixa o bloco abaixo fazer getPartida para atualizar o turno
+                }
+
+                // Não adiciona mensagens de controle ao chat normal
+                if (!text.startsWith('__TURNO__:') && !text.startsWith('__VEZ__:') && !text.startsWith('__ACUSACAO__:')) {
+                  addChatMsg(payload.author ?? '??', text);
+                  try {
+                    const rawNow = sessionStorage.getItem(`partida_chat_${partidaId}`);
+                    const arr = rawNow ? JSON.parse(rawNow) : [];
+                    arr.push({ author: payload.author, text });
+                    sessionStorage.setItem(`partida_chat_${partidaId}`, JSON.stringify(arr));
+                  } catch (e) {}
+                }
+
+                // Atualizar estado da partida
                 try {
-                  const rawNow = sessionStorage.getItem(`partida_chat_${partidaId}`);
-                  const arr = rawNow ? JSON.parse(rawNow) : [];
-                  arr.push({ author: payload.author, text: payload.text });
-                  sessionStorage.setItem(`partida_chat_${partidaId}`, JSON.stringify(arr));
+                  const partida = await api.getPartida(undefined, partidaId);
+                  setPartidaState(partida);
+                  const players = mapPartidaToPlayers(partida, meUserRef.current);
+                  setPlayersState(players);
+                  savePlayersToSession(players);
+                  const idx = players.findIndex(p => p.ordemTurno === partida.turnoAtual);
+                  setTurnIndex(idx >= 0 ? idx : 0);
+                  try {
+                    const hasAny = ['Suspeito','Arma','Local'].some(cat => ((cardsByCategory as any)[cat] ?? []).length > 0);
+                    if (!hasAny && partida?.tema?.id) {
+                      const cartas = await api.listCartas(partida.tema.id);
+                      const grouped: Record<string, any[]> = { Suspeito: [], Arma: [], Local: [] };
+                      for (const c of cartas) {
+                        if (c.tipo === 'SUSPEITO') grouped.Suspeito.push(c);
+                        if (c.tipo === 'ARMA') grouped.Arma.push(c);
+                        if (c.tipo === 'LOCAL') grouped.Local.push(c);
+                      }
+                      setCardsByCategory(grouped);
+                    }
+                  } catch (err) { void err; }
                 } catch (e) {}
               } catch (err) {}
             };
@@ -486,10 +942,23 @@ export default function Page() {
           .special-elite { font-family: 'Special Elite', cursive; }
           .paper-sheet { background-color: var(--paper-bg); background-image: url('https://www.transparenttextures.com/patterns/paper.png'); background-repeat: repeat; box-shadow: 5px 5px 15px rgba(0,0,0,0.5); border: 1px solid #dcd3bc; color: #111827; }
           .crime-tape { background: repeating-linear-gradient(45deg, #facc15, #facc15 20px, #000 20px, #000 40px); }
-          .clue-card { width: 120px; height: 180px; background: white; border: 2px solid #333; box-shadow: 3px 3px 8px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s; display:flex; flex-direction:column; justify-content:space-between; padding:8px; }
+          .clue-card { width: 120px; aspect-ratio: 2/3; height: auto; max-height: 180px; background: white; border: 2px solid #333; box-shadow: 3px 3px 8px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s; display:flex; flex-direction:column; justify-content:flex-start; padding:8px; box-sizing: border-box; }
           .clue-card:hover { transform: translateY(-10px); }
           .clue-card .font-bold { color: #111827; }
           .clue-card:hover .font-bold, .clue-card.selected .font-bold { color: var(--accent-red); }
+          /* Image container inside game cards (keeps game's proportion but mirrors /temas layout) */
+          .clue-card .card-image { width: 100%; flex: 1 1 auto; min-height: 0; overflow: hidden; display:block; margin-bottom: 6px; }
+          .clue-card .card-image img { width: 100%; height: 100%; object-fit: cover; display:block; }
+          /* Mini variant used in Evidências Públicas */
+          .mini-clue-card { width: 72px; aspect-ratio: 2/3; display:flex; flex-direction:column; justify-content:flex-start; padding:6px; box-sizing:border-box; }
+          .mini-clue-card .mini-card-image { width:100%; flex: 1 1 auto; min-height: 0; overflow:hidden; margin-bottom:6px; border:1px solid #e6e6e6; }
+          .mini-clue-card .mini-card-image img { width:100%; height:100%; object-fit:cover; display:block; }
+          .mini-clue-card .card-name { font-size:10px; line-height:1rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+          /* Hand (private) small variant used in footer */
+          .hand-card { width: 92px; aspect-ratio: 2/3; display:flex; flex-direction:column; justify-content:flex-start; padding:6px; box-sizing:border-box; background:white; border:2px solid #333; box-shadow: 2px 2px 6px rgba(0,0,0,0.2); }
+          .hand-card .card-image { width:100%; flex:1 1 auto; min-height:0; overflow:hidden; margin-bottom:6px; }
+          .hand-card .card-image img { width:100%; height:100%; object-fit:cover; display:block; }
+          .hand-card .card-name { font-size:11px; line-height:1rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
           .is-eliminated { filter: grayscale(0.8) contrast(0.8); }
           .stamp-defeated { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-20deg); border: 12px double var(--accent-red); color: var(--accent-red); padding: 20px 50px; font-size: 5rem; z-index: 500; background: rgba(253, 246, 227, 0.95); pointer-events: none; display: none; text-align: center; box-shadow: 0 0 100px rgba(0,0,0,0.5); }
           .is-eliminated .stamp-defeated { display: block; }
@@ -542,56 +1011,107 @@ export default function Page() {
           <div className="col-span-3 flex flex-col paper-sheet p-4 flex-1 min-h-0">
             <h2 className="special-elite text-xl border-b-2 border-stone-800 mb-4 uppercase shrink-0">Dossiê de Eliminação</h2>
             <div id="dossie-list" className="flex-1 overflow-y-auto space-y-4 pr-2">
-              <section data-category="Suspeito">
-                <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Suspeitos</h3>
-                <div className="flex flex-col gap-1">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Srta. Scarlett" /> Srta. Scarlett</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Coronel Mustard" /> Coronel Mustard</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Rev. Green" /> Reverendo Green</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Sra. Peacock" /> Sra. Peacock</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Prof. Plum" /> Prof. Plum</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Sra. White" /> Sra. White</label>
-                </div>
-              </section>
-              <section data-category="Arma">
-                <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Armas</h3>
-                <div className="flex flex-col gap-1">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Castial" /> Castial</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Faca" /> Faca</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Revlver" /> Revlver</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Corda" /> Corda</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Cano" /> Cano</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Chave Inglesa" /> Chave Inglesa</label>
-                </div>
-              </section>
-              <section data-category="Local">
-                <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Locais</h3>
-                <div className="flex flex-col gap-1">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Cozinha" /> Cozinha</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Biblioteca" /> Biblioteca</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Hall" /> Hall</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Sala de Estar" /> Sala de Estar</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Sala de Msica" /> Sala de Msica</label>
-                  <label className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1"><input type="checkbox" className="elimination-checkbox" data-name="Jardim" /> Jardim</label>
-                </div>
-              </section>
+              {(() => {
+                const hasThemeCards = ['Suspeito','Arma','Local'].some(cat => (cardsByCategory[cat] ?? []).length > 0);
+                if (hasThemeCards) {
+                  return (['Suspeito','Arma','Local'] as const).map(cat => (
+                    <section key={cat} data-category={cat}>
+                      <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">
+                        {cat === 'Suspeito' ? 'Suspeitos' : cat === 'Arma' ? 'Armas' : 'Locais'}
+                      </h3>
+                      <div className="flex flex-col gap-1">
+                        {(cardsByCategory[cat] ?? []).map((c: any) => (
+                          <label key={c.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1">
+                            <input
+                              type="checkbox"
+                              className="elimination-checkbox"
+                              data-id={c.id}
+                              data-name={c.nome}
+                              checked={dossieChecked.has(c.nome)}
+                              onChange={() => toggleDossieCheck(c.nome)}
+                            />
+                            {c.nome}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  ));
+                }
+                // Fallback estático quando cartas do tema ainda não foram carregadas
+                return (
+                  <>
+                    <section data-category="Suspeito">
+                      <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Suspeitos</h3>
+                      <div className="flex flex-col gap-1">
+                        {['Srta. Scarlett','Coronel Mustard','Rev. Green','Sra. Peacock','Prof. Plum','Sra. White'].map(n => (
+                          <label key={n} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1">
+                            <input type="checkbox" className="elimination-checkbox" data-name={n} checked={dossieChecked.has(n)} onChange={() => toggleDossieCheck(n)} />
+                            {n === 'Rev. Green' ? 'Reverendo Green' : n}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                    <section data-category="Arma">
+                      <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Armas</h3>
+                      <div className="flex flex-col gap-1">
+                        {['Castiçal','Faca','Revólver','Corda','Cano','Chave Inglesa'].map(n => (
+                          <label key={n} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1">
+                            <input type="checkbox" className="elimination-checkbox" data-name={n} checked={dossieChecked.has(n)} onChange={() => toggleDossieCheck(n)} />
+                            {n}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                    <section data-category="Local">
+                      <h3 className="text-[9px] font-bold bg-stone-800 text-white px-2 py-1 mb-2 uppercase tracking-widest">Locais</h3>
+                      <div className="flex flex-col gap-1">
+                        {['Cozinha','Biblioteca','Hall','Sala de Estar','Sala de Música','Jardim'].map(n => (
+                          <label key={n} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-stone-200 p-1">
+                            <input type="checkbox" className="elimination-checkbox" data-name={n} checked={dossieChecked.has(n)} onChange={() => toggleDossieCheck(n)} />
+                            {n}
+                          </label>
+                        ))}
+                      </div>
+                    </section>
+                  </>
+                );
+              })()}
             </div>
+
           </div>
 
           <div className="col-span-6 flex flex-col gap-4 flex-1 min-h-0">
             <div className="paper-sheet p-4 shrink-0 flex justify-around items-center">
               <div className="text-center">
-                <span className="text-[8px] font-bold text-stone-400 block mb-2 uppercase tracking-widest">Evidncias Pblicas</span>
-                <div className="flex gap-2">
-                  <div onClick={() => zoomCard('SALA DE MSICA', 'Local')} className="w-16 h-20 border-2 border-green-800 flex flex-col items-center justify-between text-[10px] text-stone-700 font-bold p-1 text-center bg-white cursor-pointer hover:-translate-y-1 transition-transform shadow-sm group">
-                    <span className="mt-auto group-hover:text-red-800 transition-colors uppercase leading-tight">SALA DE MSICA</span>
-                    <span className="text-[6px] text-stone-400 uppercase font-bold border-t border-stone-200 w-full mt-1">Local</span>
-                  </div>
-                  <div onClick={() => zoomCard('CHAVE INGLESA', 'Arma')} className="w-16 h-20 border-2 border-stone-600 flex flex-col items-center justify-between text-[10px] text-stone-700 font-bold p-1 text-center bg-white cursor-pointer hover:-translate-y-1 transition-transform shadow-sm group">
-                    <span className="mt-auto group-hover:text-red-800 transition-colors uppercase leading-tight">CHAVE INGLESA</span>
-                    <span className="text-[6px] text-stone-400 uppercase font-bold border-t border-stone-200 w-full mt-1">Arma</span>
-                  </div>
-                </div>
+                {(() => {
+                  const reveladas = (partidaState && partidaState.cartasReveladas) || [];
+                  if (!Array.isArray(reveladas) || reveladas.length === 0) return null;
+                  return (
+                    <>
+                      <span className="text-[8px] font-bold text-stone-400 block mb-2 uppercase tracking-widest">Evidências Públicas</span>
+                      <div className="flex gap-2 justify-center flex-wrap">
+                        {reveladas.map((c: any) => {
+                          const img = (c.imageUrl || c.image || c.imagem) || null;
+                          const nome = (c.nome || c.name || '').toString();
+                          const tipo = (c.tipo || '').toString().toUpperCase();
+                          const tipoLabel = tipo === 'SUSPEITO' || tipo === 'SUS' ? 'Suspeito' : tipo === 'ARMA' ? 'Arma' : 'Local';
+                          const typeTextClass = tipo === 'SUSPEITO' ? 'text-blue-600' : tipo === 'ARMA' ? 'text-green-600' : tipo === 'LOCAL' ? 'text-purple-600' : 'text-stone-500';
+                          return (
+                            <div key={c.id} onClick={() => zoomCard(nome, tipoLabel, img)} className="evidence-card border-2 p-2 bg-white cursor-pointer shadow-sm hover:scale-105 transition-transform" style={{ width: 120 }}>
+                              <div className="w-full h-[110px] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+                                {img ? <img src={img} className="w-full h-full object-cover" alt={nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{nome.toUpperCase()}</div>}
+                              </div>
+                              <div className="flex flex-col px-1">
+                                <span className="font-bold card-name text-black text-[10px] sm:text-[11px] leading-tight text-center uppercase" style={{ minHeight: '2.2em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{nome}</span>
+                                <span className={"text-[8px] uppercase font-bold text-center mt-1 tracking-widest " + typeTextClass}>{tipoLabel}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
               <div className="w-32 h-20 bg-[#dcc4a3] border-b-4 border-r-4 border-stone-600 shadow-lg flex items-center justify-center relative cursor-pointer hover:scale-105 transition-transform" onClick={() => openActionModal('acusacao')}>
                 <span className="special-elite text-red-900 font-bold text-lg -rotate-6 uppercase">Confidencial</span>
@@ -601,12 +1121,35 @@ export default function Page() {
 
             <div className="flex-1 paper-sheet p-6 flex flex-col items-center justify-center text-center relative border-dashed border-4 border-stone-300 m-1">
               <div id="action-buttons" className="space-y-6">
-                <h2 className="special-elite text-4xl text-stone-800 uppercase tracking-tighter">Sua vez, Agente</h2>
-                <p className="text-stone-500 italic text-sm mb-6">Analise as evidências e tome uma decisão.</p>
-                <button onClick={() => openActionModal('pergunta')} className="w-full bg-stone-900 text-white py-5 px-6 special-elite text-xl hover:bg-stone-700 transition-all shadow-lg active:scale-95 mb-4">?? FAZER PERGUNTA ??</button>
-                <button onClick={() => openActionModal('acusacao')} className="w-full bg-red-800 text-white py-5 px-6 special-elite text-xl hover:bg-red-900 transition-all shadow-lg active:scale-95">!! ACUSAÇÃO !!</button>
+                {(() => {
+                  const myIndex = playersState.findIndex(p => p && p.isLocal);
+                  const isMyTurn = myIndex >= 0 && myIndex === turnIndex;
 
-                <button onClick={() => passTurn()} className="w-full mt-6 bg-stone-200 text-stone-900 py-4 font-bold uppercase rounded shadow-sm">&gt;&gt; PASSAR VEZ &gt;&gt;</button>
+                  if (isMyTurn) {
+                    return (
+                      <>
+                        <h2 className="special-elite text-4xl text-stone-800 uppercase tracking-tighter">Sua Vez, Agente</h2>
+                        <p className="text-stone-500 italic text-sm mb-6">Analise as evidências e tome uma decisão.</p>
+                        {!hasAskedQuestion && (
+                          <button onClick={() => openActionModal('pergunta')} disabled={actionLoading} className="w-full bg-stone-900 text-white py-5 px-6 special-elite text-xl hover:bg-stone-700 transition-all shadow-lg active:scale-95 mb-4 disabled:opacity-40">🔍 FAZER PERGUNTA</button>
+                        )}
+                        {hasAskedQuestion && (
+                          <p className="text-stone-500 italic text-xs">Pergunta já feita neste turno.</p>
+                        )}
+                        <button onClick={() => openActionModal('acusacao')} disabled={actionLoading} className="w-full bg-red-800 text-white py-5 px-6 special-elite text-xl hover:bg-red-900 transition-all shadow-lg active:scale-95 disabled:opacity-40">⚠ ACUSAÇÃO</button>
+                        <button onClick={() => passTurn()} disabled={actionLoading || !hasAskedQuestion} title={!hasAskedQuestion ? 'Faça uma pergunta antes de passar a vez' : ''} className="w-full mt-6 bg-stone-200 text-stone-900 py-4 font-bold uppercase rounded shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">&gt;&gt; PASSAR VEZ &gt;&gt;</button>
+                      </>
+                    );
+                  } else {
+                    return (
+                      <>
+                        <h2 className="special-elite text-4xl text-stone-800 uppercase tracking-tighter opacity-40">Aguardando...</h2>
+                        <p className="text-stone-500 italic text-sm">Não é sua vez.</p>
+                        {gamePhaseBanner && <p className="text-stone-600 text-xs mt-2 italic">{gamePhaseBanner}</p>}
+                      </>
+                    );
+                  }
+                })()}
               </div>
             </div>
           </div>
@@ -616,23 +1159,19 @@ export default function Page() {
               <h3 className="text-[10px] font-bold text-stone-500 uppercase border-b mb-2 shrink-0">Equipe em Campo</h3>
               <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {playersState && playersState.length > 0 ? (
-                  // Only show players that look like part of the partida (have id/usuarioId/username)
                   playersState
                     .filter(p => p && (p.usuarioId || p.id || p.username))
                     .map((p, vIdx) => {
                       const globalIdx = playersState.findIndex(pp => pp && ((pp.id && p.id && pp.id === p.id) || (pp.usuarioId && p.usuarioId && pp.usuarioId === p.usuarioId) || (pp.username && p.username && pp.username === p.username)));
-                      const borders = ['border-yellow-500','border-blue-600','border-orange-500','border-purple-600','border-green-500','border-red-500'];
-                      const bc = borders[(globalIdx >= 0 ? globalIdx : vIdx) % borders.length];
                       const name = (p && (p.username || p.name)) || `Jogador ${vIdx+1}`;
                       const isLocal = Boolean(p && p.isLocal);
                       const isTurn = globalIdx === turnIndex;
                       const isEliminado = Boolean(p && (p.isEliminado || p.is_eliminado));
-
                       return (
-                        <div key={p?.id ?? vIdx} className={`flex justify-between items-center bg-stone-50 p-1 ${bc} shadow-sm`}>
-                          <span className="text-[10px] font-bold">{isLocal ? '👮 ' : '🕵️ '}{name}</span>
+                        <div key={p?.id ?? vIdx} className={`flex justify-between items-center p-1 border-l-4 shadow-sm ${isLocal ? 'bg-yellow-50 border-yellow-400' : 'bg-stone-50 border-stone-300'} ${isEliminado ? 'opacity-50' : ''}`}>
+                          <span className={`text-[10px] ${isLocal ? 'font-extrabold text-yellow-800 underline' : 'font-bold'} ${isEliminado ? 'line-through' : ''}`}>{name}</span>
                           {isTurn ? (
-                            <span className="bg-yellow-500 text-white px-1 font-bold uppercase text-[8px]">Sua Vez</span>
+                            <span className="bg-yellow-500 text-white px-1 font-bold uppercase text-[8px]">Vez</span>
                           ) : isEliminado ? (
                             <span className="bg-red-800 text-white px-1 font-bold uppercase text-[8px]">Eliminado</span>
                           ) : (
@@ -652,7 +1191,6 @@ export default function Page() {
                 <button onClick={() => switchTab('chat')} id="btn-tab-chat" className="tab-btn active px-4 py-1 text-[10px] font-bold uppercase border-t border-l border-r border-stone-400 paper-sheet rounded-t-md">Rádio</button>
                 <button onClick={() => switchTab('log')} id="btn-tab-log" className="tab-btn px-4 py-1 text-[10px] font-bold uppercase border-t border-l border-r border-stone-400 bg-stone-300 text-stone-500 rounded-t-md">Dossiê</button>
               </div>
-
               <div className="paper-sheet flex-1 flex flex-col overflow-hidden border-t-0 -mt-px relative z-0">
                 <div id="content-chat" className="flex-1 flex flex-col h-full">
                   <div id="chat-messages" className="flex-1 overflow-y-auto p-4 flex flex-col gap-1 text-[11px]"></div>
@@ -662,22 +1200,6 @@ export default function Page() {
                   </div>
                 </div>
                 <div id="content-log" className="hidden flex-1 overflow-y-auto p-4 flex flex-col gap-3 text-[10px]">
-                  <div className="border-l-2 border-stone-400 pl-2">
-                    <p className="text-stone-500 font-bold uppercase text-[8px] mb-1">Agente Júlio &gt; Gomes</p>
-                    <div className="flex flex-col gap-1">
-                      <span className="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">Sala de Música</span>
-                      <span className="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">Faca</span>
-                    </div>
-                    <p className="text-green-800 font-bold uppercase mt-1">Carta revelada.</p>
-                  </div>
-                  <div className="border-l-2 border-stone-400 pl-2 bg-stone-100 rounded-r py-1">
-                    <p className="text-stone-500 font-bold uppercase text-[8px] mb-1">Você &gt; Agente Júlio</p>
-                    <div className="flex flex-col gap-1">
-                      <span className="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">Rev. Green</span>
-                      <span className="bg-stone-200 px-1 py-0.5 rounded text-stone-700 italic">Cano</span>
-                    </div>
-                    <p className="text-red-800 font-bold uppercase mt-1">Nenhuma carta revelada.</p>
-                  </div>
                 </div>
               </div>
             </div>
@@ -686,21 +1208,27 @@ export default function Page() {
 
         <footer className="h-40 shrink-0 bg-stone-900/95 flex items-center justify-center gap-6 relative shadow-[0_-10px_20px_rgba(0,0,0,0.5)]">
           <div className="absolute -top-6 bg-stone-800 px-6 py-1 text-[9px] text-white font-bold uppercase tracking-widest border border-stone-600">Arquivo Privado</div>
-          <div onClick={() => zoomCard('COL. MUSTARD', 'Suspeito')} className="clue-card flex flex-col items-center justify-between p-2 text-center group">
-            <div className="w-full h-1 bg-yellow-600"></div>
-            <span className="font-bold text-[10px] mt-2 group-hover:text-red-800">COL. MUSTARD</span>
-            <span className="text-[8px] text-stone-500 uppercase font-bold border-t border-stone-300 w-full pt-1 mb-1">Suspeito</span>
-          </div>
-          <div onClick={() => zoomCard('FACA', 'Arma')} className="clue-card flex flex-col items-center justify-between p-2 text-center group">
-            <div className="w-full h-1 bg-stone-600"></div>
-            <span className="font-bold text-[10px] mt-2 group-hover:text-red-800">FACA</span>
-            <span className="text-[8px] text-stone-500 uppercase font-bold border-t border-stone-300 w-full pt-1 mb-1">Arma</span>
-          </div>
-          <div onClick={() => zoomCard('BIBLIOTECA', 'Local')} className="clue-card flex flex-col items-center justify-between p-2 text-center group">
-            <div className="w-full h-1 bg-green-800"></div>
-            <span className="font-bold text-[10px] mt-2 group-hover:text-red-800">BIBLIOTECA</span>
-            <span className="text-[8px] text-stone-500 uppercase font-bold border-t border-stone-300 w-full pt-1 mb-1">Local</span>
-          </div>
+          {(() => {
+            const mao = (partidaState && partidaState.minhaMao) || [];
+            return mao.map((c: any) => {
+              const img = (c.imageUrl || c.image || c.imagem) || null;
+              const nome = (c.nome || c.name || '').toString();
+              const tipo = (c.tipo || '').toString().toUpperCase();
+              const tipoLabel = tipo === 'SUSPEITO' ? 'Suspeito' : tipo === 'ARMA' ? 'Arma' : 'Local';
+              const borderColor = tipo === 'SUSPEITO' ? 'border-yellow-600' : tipo === 'ARMA' ? 'border-stone-600' : 'border-green-800';
+              return (
+                <div key={c.id} onClick={() => zoomCard(nome, tipoLabel, img)} className={`evidence-card border-2 ${borderColor} p-2 bg-white cursor-pointer shadow-sm hover:scale-105 transition-transform`} style={{ width: 100 }}>
+                  <div className="w-full h-[100px] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+                    {img ? <img src={img} className="w-full h-full object-cover" alt={nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{nome.toUpperCase()}</div>}
+                  </div>
+                  <div className="flex flex-col px-1">
+                    <span className="font-bold text-black text-[10px] leading-tight text-center uppercase" style={{ minHeight: '2.2em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{nome}</span>
+                    <span className={"text-[8px] uppercase font-bold text-center mt-1 tracking-widest " + (tipo === 'SUSPEITO' ? 'text-blue-600' : tipo === 'ARMA' ? 'text-green-600' : 'text-purple-600')}>{tipoLabel}</span>
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </footer>
 
         <div id="action-modal-overlay" className="fixed inset-0 z-[600] hidden items-center justify-center bg-black/90 p-4">
@@ -726,6 +1254,116 @@ export default function Page() {
             <div className="text-[9px] italic text-stone-500 mt-8 uppercase">Material Confidencial</div>
           </div>
         </div>
+
+        {cardZoom && (
+          <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/80" onClick={() => setCardZoom(null)}>
+            <div onClick={(e) => e.stopPropagation()} className="paper-sheet flex flex-col items-center border-[6px] border-stone-800 shadow-2xl" style={{ width: 260 }}>
+              <div className="w-full bg-stone-800 text-white text-[9px] font-bold uppercase tracking-widest text-center py-2">Arquivo Privado</div>
+              <div className="w-full h-[220px] bg-stone-200 overflow-hidden border-b border-stone-300">
+                {cardZoom.imageUrl ? <img src={cardZoom.imageUrl} className="w-full h-full object-cover" alt={cardZoom.nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{cardZoom.nome.toUpperCase()}</div>}
+              </div>
+              <div className="flex flex-col px-4 py-3 items-center w-full">
+                <span className="special-elite text-xl text-center uppercase text-black">{cardZoom.nome}</span>
+                <span className={"text-[9px] uppercase font-bold tracking-widest mt-1 " + (cardZoom.tipoLabel === 'Suspeito' ? 'text-blue-600' : cardZoom.tipoLabel === 'Arma' ? 'text-green-600' : 'text-purple-600')}>{cardZoom.tipoLabel}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {waitingForAnswer && (
+          <div className="fixed inset-0 z-[810] flex items-center justify-center bg-black/80">
+            <div className="paper-sheet p-8 flex flex-col items-center gap-4 border-4 border-stone-800">
+              <div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="special-elite text-2xl text-stone-800">Aguardando {waitingForAnswer.targetName}...</p>
+              <p className="text-xs text-stone-500 italic">{waitingForAnswer.carta1Nome} · {waitingForAnswer.carta2Nome}</p>
+            </div>
+          </div>
+        )}
+
+        {pendingAnswerRequest && (
+          <div className="fixed inset-0 z-[810] flex items-center justify-center bg-black/80">
+            <div className="paper-sheet p-6 flex flex-col gap-4 border-4 border-stone-800 max-w-lg w-full">
+              <h3 className="special-elite text-2xl uppercase text-center">{pendingAnswerRequest.askerName} pergunta</h3>
+              <p className="text-xs text-stone-500 text-center">Selecione a carta a revelar (ou confirme que não tem nenhuma)</p>
+              <div className="flex gap-4 justify-center flex-wrap">
+                {pendingAnswerRequest.cardObjects.map((co) => {
+                  const img = co.imageUrl || null;
+                  const tipo = (co.tipo || '').toUpperCase();
+                  const isSelected = selectedReveal === co.nome;
+                  return (
+                    <div key={co.nome}
+                      onClick={() => co.hasIt ? setSelectedReveal(co.nome) : undefined}
+                      className={`evidence-card border-2 p-2 bg-white transition-transform ${co.hasIt ? 'cursor-pointer hover:scale-105' : 'opacity-40 cursor-not-allowed'} ${isSelected ? 'ring-4 ring-yellow-400' : ''}`}
+                      style={{ width: 120 }}>
+                      <div className="w-full h-[110px] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+                        {img ? <img src={img} className="w-full h-full object-cover" alt={co.nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{co.nome.toUpperCase()}</div>}
+                      </div>
+                      <div className="flex flex-col px-1">
+                        <span className="font-bold text-black text-[10px] leading-tight text-center uppercase" style={{ minHeight: '2.2em', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{co.nome}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {pendingAnswerRequest.cardObjects.every(co => !co.hasIt) && (
+                <p className="text-center text-xs text-red-700 italic">Você não tem nenhuma dessas cartas.</p>
+              )}
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={async () => {
+                    const hasNone = pendingAnswerRequest.cardObjects.every(co => !co.hasIt);
+                    if (!hasNone && !selectedReveal) return;
+                    const chosenCardName = hasNone ? '' : (selectedReveal || '');
+                    try {
+                      const pid = meUserRef.current?.currentPartidaId;
+                      if (pid) await api.sendChatMessage(undefined, pid, `__ACK__:${pendingAnswerRequest.perguntaId}:${chosenCardName}`);
+                    } catch {}
+                    setPendingAnswerRequest(null);
+                    setSelectedReveal(null);
+                  }}
+                  disabled={!pendingAnswerRequest.cardObjects.every(co => !co.hasIt) && !selectedReveal}
+                  className="bg-stone-900 text-white px-6 py-2 special-elite text-lg disabled:opacity-40">
+                  Enviar Resposta
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {questionResultOverlay && (
+          <div className="fixed inset-0 z-[810] flex items-center justify-center bg-black/80">
+            <div className="paper-sheet p-6 flex flex-col gap-4 border-4 border-stone-800 max-w-md w-full items-center">
+              <h3 className="special-elite text-2xl uppercase text-center">Resultado da Pergunta</h3>
+              <p className="text-xs text-stone-500 italic text-center">{questionResultOverlay.carta1} · {questionResultOverlay.carta2}</p>
+              {questionResultOverlay.cartaRevelada ? (
+                <>
+                  <p className="text-green-700 font-bold text-sm uppercase text-center">Carta revelada!</p>
+                  {(() => {
+                    const cr = questionResultOverlay.cartaRevelada;
+                    const img = cr.imageUrl || null;
+                    const tipo = (cr.tipo || '').toUpperCase();
+                    const tipoLabel = tipo === 'SUSPEITO' ? 'Suspeito' : tipo === 'ARMA' ? 'Arma' : 'Local';
+                    return (
+                      <div className="evidence-card border-2 p-2 bg-white" style={{ width: 140 }}>
+                        <div className="w-full h-[120px] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+                          {img ? <img src={img} className="w-full h-full object-cover" alt={cr.nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{cr.nome.toUpperCase()}</div>}
+                        </div>
+                        <div className="flex flex-col px-1">
+                          <span className="special-elite text-sm text-center uppercase text-black">{cr.nome}</span>
+                          <span className={"text-[8px] uppercase font-bold text-center mt-1 tracking-widest " + (tipo === 'SUSPEITO' ? 'text-blue-600' : tipo === 'ARMA' ? 'text-green-600' : 'text-purple-600')}>{tipoLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              ) : (
+                <p className="text-red-700 font-bold text-sm uppercase text-center">Nenhuma carta revelada.</p>
+              )}
+              <button onClick={() => setQuestionResultOverlay(null)} className="bg-stone-900 text-white px-6 py-2 special-elite text-lg mt-2">OK</button>
+            </div>
+          </div>
+        )}
+
         {showAbandonModal ? (
           <div className="fixed inset-0 z-[800] flex items-center justify-center bg-black/60">
             <div className="paper-sheet max-w-md w-full p-6 rounded shadow-lg">
@@ -738,6 +1376,84 @@ export default function Page() {
             </div>
           </div>
         ) : null}
+
+        {accusationConfirm && (
+          <div className="fixed inset-0 z-[820] flex items-center justify-center bg-black/80">
+            <div className="paper-sheet max-w-lg w-full border-4 border-red-800 shadow-2xl overflow-hidden">
+              <div className="bg-red-800 px-6 py-4">
+                <h3 className="special-elite text-2xl text-white uppercase">Confirmar Acusação</h3>
+                <p className="text-red-200 text-xs mt-1">Esta ação é irreversível. Se errar, será eliminado.</p>
+              </div>
+              <div className="p-6 flex flex-col gap-3">
+                <table className="w-full text-sm">
+                  <tbody>
+                    <tr><td className="font-bold text-blue-700 py-1 pr-4 uppercase text-xs">Suspeito</td><td className="font-bold">{accusationConfirm.suspeito?.name || '—'}</td></tr>
+                    <tr><td className="font-bold text-green-700 py-1 pr-4 uppercase text-xs">Arma</td><td className="font-bold">{accusationConfirm.arma?.name || '—'}</td></tr>
+                    <tr><td className="font-bold text-purple-700 py-1 pr-4 uppercase text-xs">Local</td><td className="font-bold">{accusationConfirm.local?.name || '—'}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end gap-3 px-6 pb-6">
+                <button onClick={() => setAccusationConfirm(null)} className="px-4 py-2 border rounded bg-white text-stone-800 font-bold">Recuar</button>
+                <button onClick={() => executeAccusation()} className="px-6 py-2 bg-red-800 text-white rounded font-bold special-elite text-lg">Acusar</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {gameEndOverlay && (
+          <div className="fixed inset-0 z-[820] flex items-center justify-center bg-black/90">
+            <div className="paper-sheet max-w-lg w-full p-8 border-4 border-stone-800 shadow-2xl flex flex-col items-center gap-4">
+              {gameEndOverlay.isCorreta ? (
+                <>
+                  <h2 className="special-elite text-4xl text-green-800 uppercase">Caso Resolvido!</h2>
+                  <p className="text-stone-600 italic text-center">Você identificou corretamente os culpados.</p>
+                </>
+              ) : gameEndOverlay.vencedorName ? (
+                <>
+                  <h2 className="special-elite text-4xl text-stone-800 uppercase">Jogo Encerrado!</h2>
+                  <p className="text-stone-600 italic text-center">
+                    <strong>{gameEndOverlay.vencedorName}</strong> solucionou o caso e venceu a investigação. Você perdeu.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="special-elite text-4xl text-red-800 uppercase">Eliminado!</h2>
+                  <p className="text-stone-600 italic text-center">Sua acusação estava errada. Você foi eliminado da investigação.</p>
+                </>
+              )}
+              {gameEndOverlay.cartasCrime && (
+                <div className="flex gap-4 justify-center flex-wrap mt-2">
+                  {[gameEndOverlay.cartasCrime.suspeito, gameEndOverlay.cartasCrime.arma, gameEndOverlay.cartasCrime.local].filter(Boolean).map((c: any) => {
+                    const img = (c.imageUrl || c.image || c.imagem) || null;
+                    const nome = (c.nome || '').toString();
+                    const tipo = (c.tipo || '').toUpperCase();
+                    const tipoLabel = tipo === 'SUSPEITO' ? 'Suspeito' : tipo === 'ARMA' ? 'Arma' : 'Local';
+                    return (
+                      <div key={c.id} className="evidence-card border-2 p-2 bg-white" style={{ width: 100 }}>
+                        <div className="w-full h-[90px] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+                          {img ? <img src={img} className="w-full h-full object-cover" alt={nome} /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-stone-400">{nome.toUpperCase()}</div>}
+                        </div>
+                        <div className="flex flex-col px-1">
+                          <span className="text-[9px] font-bold text-center uppercase text-black">{nome}</span>
+                          <span className={"text-[7px] uppercase font-bold text-center mt-1 tracking-widest " + (tipo === 'SUSPEITO' ? 'text-blue-600' : tipo === 'ARMA' ? 'text-green-600' : 'text-purple-600')}>{tipoLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {(gameEndOverlay.isEliminado && !gameEndOverlay.isCorreta && !gameEndOverlay.vencedorName) ? (
+                <div className="flex gap-4 mt-4">
+                  <button onClick={() => setGameEndOverlay(null)} className="bg-stone-600 text-white px-6 py-3 special-elite text-lg shadow-lg hover:bg-stone-500">Continuar Observando</button>
+                  <button onClick={() => { setGameEndOverlay(null); router.push('/home'); }} className="bg-stone-900 text-white px-6 py-3 special-elite text-lg shadow-lg hover:bg-stone-700">Sair</button>
+                </div>
+              ) : (
+                <button onClick={() => { setGameEndOverlay(null); router.push('/home'); }} className="mt-4 bg-stone-900 text-white px-8 py-3 special-elite text-xl shadow-lg hover:bg-stone-700">Sair</button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

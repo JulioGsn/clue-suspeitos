@@ -179,6 +179,9 @@ export const api = {
       token,
     });
   },
+  passarVez(token?: string, id?: string) {
+    return request<PartidaResponse>(`/partidas/${id}/passar`, 'POST', { token });
+  },
   criarPergunta(token?: string, id?: string, body?: unknown) {
     return request<PerguntaResponse>(`/partidas/${id}/perguntas`, 'POST', {
       token,

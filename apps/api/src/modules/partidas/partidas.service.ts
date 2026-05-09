@@ -206,7 +206,9 @@ export class PartidasService {
       throw new BadRequestException('A partida nao esta em lobby');
     }
 
-    const jogadores = await this.findJogadores(id);
+    let jogadores = await this.findJogadores(id);
+    // embaralha a ordem dos jogadores ao iniciar a partida
+    jogadores = this.shuffle(jogadores);
     const alreadyJoined = jogadores.some(
       (jogador) => jogador.usuario?.id === usuarioId,
     );
@@ -639,15 +641,19 @@ export class PartidasService {
         .where('partida_id = :id', { id })
         .execute();
 
-      for (const [index, jogador] of jogadores.entries()) {
+      // embaralha a ordem dos jogadores antes de definir ordemTurno
+      const shuffledJogadores = this.shuffle(jogadores);
+
+      for (const [index, jogador] of shuffledJogadores.entries()) {
         jogador.ordemTurno = index + 1;
         await jogadorRepository.save(jogador);
       }
 
+      // distribui as cartas para as maos seguindo a ordem embaralhada
       const maoCartas = cartasParaMao.map((carta, index) =>
         maoCartaRepository.create({
           partida,
-          jogador: jogadores[index % jogadores.length],
+          jogador: shuffledJogadores[index % shuffledJogadores.length],
           carta,
         }),
       );
@@ -662,6 +668,13 @@ export class PartidasService {
       partida.status = StatusPartida.EM_ANDAMENTO;
       await partidaRepository.save(partida);
     });
+
+    // notifica via chat/SSE que a partida foi iniciada
+    try {
+      await this.sendChatMessage(id, usuarioId, 'Partida iniciada');
+    } catch (err: unknown) {
+      void err;
+    }
 
     return this.findOne(id, usuarioId);
   }
@@ -712,11 +725,21 @@ export class PartidasService {
         }),
       );
 
-      partida.turnoAtual = this.getProximoTurnoHumano(jogadores, perguntador);
-      await partidaRepository.save(partida);
-
+      // manter o turno do perguntador após a pergunta (ele pode acusar ou passar)
       return createdPergunta;
     });
+
+    // registrar mensagem de sistema / notificação sobre a pergunta
+    try {
+      const autorId = perguntador.usuario?.id ?? usuarioId;
+      await this.sendChatMessage(
+        id,
+        autorId,
+        `${perguntador.usuario?.perfil?.username ?? 'Jogador'} perguntou para o próximo: ${carta1.nome} ou ${carta2.nome}`,
+      );
+    } catch (err: unknown) {
+      void err;
+    }
 
     return {
       perguntaId: pergunta.id,
@@ -851,6 +874,29 @@ export class PartidasService {
     const deveRevelarCrime =
       isCorreta || partidaAtualizada.status === StatusPartida.FINALIZADA;
 
+    // Notificar todos os clientes via SSE (igual ao passarVez) para que atualizem o estado
+    const acusadorUsername =
+      acusador.usuario?.perfil?.username ??
+      acusador.usuario?.email?.split('@')[0] ??
+      'Agente';
+    try {
+      if (isCorreta) {
+        await this.sendChatMessage(
+          id,
+          usuarioId,
+          `__ACUSACAO__:${acusadorUsername}:CORRETA`,
+        );
+      } else if (isEliminado) {
+        await this.sendChatMessage(
+          id,
+          usuarioId,
+          `__ACUSACAO__:${acusadorUsername}:ERRADA`,
+        );
+      }
+    } catch (err: unknown) {
+      void err;
+    }
+
     return {
       isCorreta,
       isEliminado,
@@ -863,6 +909,36 @@ export class PartidasService {
         : null,
       partida: await this.findOne(id, usuarioId),
     };
+  }
+
+  async passarVez(id: string, usuarioId: string): Promise<PartidaResponse> {
+    const partida = await this.findPartidaOrFail(id);
+    this.assertEmAndamento(partida);
+
+    const jogadores = await this.findJogadores(id);
+    const jogador = this.findJogadorHumano(jogadores, usuarioId);
+    this.assertJogadorAtivo(jogador);
+    this.assertTurno(partida, jogador);
+
+    const proximoTurno = this.getProximoTurnoHumano(jogadores, jogador);
+
+    await this.dataSource.transaction(async (manager) => {
+      const partidaRepository = manager.getRepository(Partida);
+      partida.turnoAtual = proximoTurno;
+      await partidaRepository.save(partida);
+    });
+
+    try {
+      await this.sendChatMessage(
+        id,
+        usuarioId,
+        `${jogador.usuario?.perfil?.username ?? 'Jogador'} passou a vez.`,
+      );
+    } catch (err: unknown) {
+      void err;
+    }
+
+    return this.findOne(id, usuarioId);
   }
 
   async updateBlocoDeNotas(

@@ -11,6 +11,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Perfil } from '../perfis/entities/perfil.entity';
 import { Jogador } from '../jogadores/entities/jogador.entity';
 import { Repository } from 'typeorm';
+import { Partida, StatusPartida } from '../partidas/entities/partida.entity';
 
 @Controller('auth')
 export class AuthController {
@@ -69,6 +70,10 @@ export class AuthController {
       relations: { partida: true },
     });
 
+    const partidaStatus = jogador?.partida?.status ?? null;
+    // Only expose currentPartidaId when the partida is not finalized
+    const currentPartidaId = partidaStatus === StatusPartida.FINALIZADA ? null : jogador?.partida?.id ?? null;
+
     return {
       id: user.usuarioId,
       email: user.email,
@@ -79,8 +84,8 @@ export class AuthController {
       vitorias: perfil?.vitorias ?? 0,
       derrotas: perfil?.derrotas ?? 0,
       abandonos: perfil?.abandonos ?? 0,
-      currentPartidaId: jogador?.partida?.id ?? null,
-      currentPartidaStatus: jogador?.partida?.status ?? null,
+      currentPartidaId,
+      currentPartidaStatus: partidaStatus,
     };
   }
 }

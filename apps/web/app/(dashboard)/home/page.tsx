@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(5);
   const user = useMemo(() => remoteUser, [remoteUser]);
 
   const loadPartidas = useCallback(async (opts?: { background?: boolean }) => {
@@ -141,12 +141,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!remoteUser?.currentPartidaId) {
-      setCountdown(10);
+      setCountdown(5);
       const id = setInterval(() => {
         setCountdown((c) => {
           if (c <= 1) {
             void loadPartidas({ background: true }).catch(() => {});
-            return 10;
+            return 5;
           }
           return c - 1;
         });

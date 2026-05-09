@@ -37,7 +37,7 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const user = useMemo(() => remoteUser, [remoteUser]);
   const isHost = Boolean(user && partida?.anfitriao.id === user.id);
-  const [timeLeft, setTimeLeft] = useState(10);
+  const [timeLeft, setTimeLeft] = useState(5);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<Array<{ author: string; text: string }>>([]);
   const chatRef = useRef<HTMLDivElement | null>(null);
@@ -115,7 +115,7 @@ export default function LobbyClient({ initialPartida = null, initialRemoteUser =
       setTimeLeft((t) => {
         if (t <= 0) {
           void fetchPlayers();
-          return 10;
+          return 5;
         }
         return t - 1;
       });

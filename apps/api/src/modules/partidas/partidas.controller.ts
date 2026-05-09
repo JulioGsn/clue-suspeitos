@@ -104,6 +104,14 @@ export class PartidasController {
     );
   }
 
+  @Post(':id/passar')
+  passarVez(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<PartidaResponse> {
+    return this.partidasService.passarVez(id, user.usuarioId);
+  }
+
   @Post(':id/acusacoes')
   criarAcusacao(
     @Param('id') id: string,

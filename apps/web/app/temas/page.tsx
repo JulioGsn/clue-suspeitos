@@ -204,13 +204,12 @@ export default function TemasPage() {
         cardEl.className = 'evidence-card flex flex-col w-full';
         cardEl.innerHTML = `
           <div class="masking-tape"></div>
-          <div class="w-full aspect-[3/4] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
+          <div class="w-full aspect-[2/3] bg-stone-200 mb-2 overflow-hidden border border-stone-300">
             <img src="${card.image}" class="w-full h-full object-cover" alt="${card.name}">
           </div>
           <div class="flex flex-col mt-auto px-1">
-            <div class="w-full h-1 ${typeBarClass} mb-1"></div>
             <span class="font-bold card-name text-[10px] sm:text-[11px] leading-tight text-center line-clamp-2 uppercase">${card.name}</span>
-            <span class="text-[8px] ${typeTextClass} uppercase font-bold text-center border-t border-stone-200 mt-1 pt-1 tracking-widest">${card.type}</span>
+            <span class="text-[8px] ${typeTextClass} uppercase font-bold text-center mt-1 tracking-widest">${card.type}</span>
           </div>
           <button type="button" onclick="editCard('${card.id}')" style="color:#fff!important" class="absolute bottom-3 left-3 bg-blue-800 text-white w-7 h-7 rounded-full text-xs opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-bold shadow-md z-20" title="Editar Prova">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828zM5 12v3h3l9.586-9.586a4 4 0 00-5.657-5.657L2.343 9.343A4 4 0 005 12z"/></svg>
@@ -561,8 +560,19 @@ export default function TemasPage() {
     (async () => {
       try {
         const temasList = await api.listTemas();
+        const currentUser = getUser();
         if (Array.isArray(temasList)) {
-          themes = temasList.map((t) => ({ id: t.id, name: t.nome, visibilidade: t.visibilidade || 'PUBLIC', cards: new Array(t.cartasCount || 0) }));
+          let filtered = temasList;
+          try {
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+              filtered = temasList.filter((t) => String(t.donoId || '') === String(currentUser?.id || ''));
+            }
+          } catch (e) {
+            // fallback: if any error, default to empty list for non-admins
+            if (!currentUser || currentUser.role !== 'ADMIN') filtered = [];
+          }
+
+          themes = filtered.map((t) => ({ id: t.id, name: t.nome, visibilidade: t.visibilidade || 'PUBLIC', cards: new Array(t.cartasCount || 0) }));
         }
       } catch (err) {
         try { console.error('listTemas failed', err); } catch {}
@@ -697,7 +707,7 @@ export default function TemasPage() {
                       </div>
                       <div id="image-editor" className="hidden mt-2 bg-stone-200 border-2 border-stone-800 p-2 shadow-inner">
                         <div className="text-[8px] uppercase font-bold text-stone-500 mb-1 text-center tracking-widest border-b border-stone-300 pb-1">Arraste para enquadrar a prova</div>
-                        <div id="crop-container" className="w-full aspect-[3/4] bg-black relative overflow-hidden cursor-move border border-stone-400">
+                        <div id="crop-container" className="w-full aspect-[2/3] bg-black relative overflow-hidden cursor-move border border-stone-400">
                           <img id="crop-image" src="" alt="Edição" />
                           <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-30">
                             <div className="border-r border-b border-white"></div><div className="border-r border-b border-white"></div><div className="border-b border-white"></div>
